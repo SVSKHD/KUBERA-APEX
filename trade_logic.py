@@ -30,13 +30,13 @@ def check_price_difference(symbol):
 
     if high_diff <= pip_difference:
         print(
-            f"The current price of {symbol} is within {pip_difference} pips of the highest price over the last 1000 candles. Current Price: {current_price}, Highest: {high}")
+            f"The current price of {symbol} is within {pip_difference} pips of the highest price over the last {CANDLE_DATA} candles. Current Price: {current_price}, Highest: {high}")
         if last_trade_price is None or abs(last_trade_price - current_price) >= pip_difference * pip_size:
             order_send(symbol, 'SELL', 0.01)  # Replace with actual volume as required
             last_trade_price = current_price
     elif low_diff <= pip_difference:
         print(
-            f"The current price of {symbol} is within {pip_difference} pips of the lowest price over the last 1000 candles. Current Price: {current_price}, Lowest: {low}")
+            f"The current price of {symbol} is within {pip_difference} pips of the lowest price over the last {CANDLE_DATA} candles. Current Price: {current_price}, Lowest: {low}")
         if last_trade_price is None or abs(last_trade_price - current_price) >= pip_difference * pip_size:
             order_send(symbol, 'BUY', 0.01)  # Replace with actual volume as required
             last_trade_price = current_price
