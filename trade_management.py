@@ -1,5 +1,6 @@
 import MetaTrader5 as mt5
 
+
 def order_send(symbol, order_type, volume, price=None, slippage=2, magic=0, comment=""):
     if order_type == 'BUY':
         order_type_mt5 = mt5.ORDER_TYPE_BUY
