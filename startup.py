@@ -5,6 +5,7 @@ account_number = 212792645  # Replace with your real account number
 password = 'pn^eNL4U'  # Replace with your real password
 server = 'OctaFX-Demo'  # Replace with your MT5 server name
 
+
 def connect_to_mt5(account_number, password, server):
     # Initialize MT5 connection
     if not mt5.initialize():
@@ -21,8 +22,8 @@ def connect_to_mt5(account_number, password, server):
     print("Connected to MT5 account #{}".format(account_number))
     return True
 
+
 def get_account_balance():
-    # Ensure we're connected to MT5
     if mt5.terminal_info() is None:
         print("Not connected to MT5.")
         return
