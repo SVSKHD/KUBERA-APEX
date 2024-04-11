@@ -50,7 +50,7 @@ import MetaTrader5 as mt5
 from trade_management import order_send
 from risk_management import close_all_trades
 
-CANDLE_DATA = 30
+CANDLE_DATA = 50
 pip_size = 0.0001
 pip_difference = 15
 opposite_pip_move = 10  # Pip difference to check for the opposite market move
@@ -77,7 +77,7 @@ def check_price_difference(symbol):
 
     # Function to handle trade opening and updating last trade details
     def handle_trade(direction, trade_price):
-        order_send(symbol, direction, 0.01)  # Modify volume as required
+        order_send(symbol, direction, 0.1)  # Modify volume as required
         last_trade.update({"price": trade_price, "direction": direction})
 
     # Close all trades if the market moves 10 pips in the opposite direction
@@ -101,4 +101,4 @@ def check_price_difference(symbol):
             handle_trade('BUY', current_price)
         else:
             print(
-                f"No significant price difference observed for {symbol} over the last {CANDLE_DATA} candles. Current Price: {current_price}, Lowest: {low}, Highest: {high}")
+                f"No significant price difference observed for {symbol} over the last {CANDLE_DATA} candles. Current Price: {current_price}, Lowest: {low}, Highest: {high} pip-difference low - {low_diff} high-diff - {high_diff}")

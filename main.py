@@ -15,11 +15,10 @@ def main():
         try:
             while True:
                 check_price_difference(symbol)
-                time.sleep(60)
+                time.sleep(1)
         except KeyboardInterrupt:
             print("\nScript interrupted by user.")
         finally:
-            mt5.shutdown()
             print("MT5 connection closed.")
     else:
         print("Failed to connect to MetaTrader 5.")

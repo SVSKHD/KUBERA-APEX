@@ -15,11 +15,6 @@ def order_send(symbol, order_type, volume, price=None, slippage=2, magic=0, comm
         mt5.shutdown()
         return None
 
-    if not symbol_info.trade_allowed:
-        print(f"Trading on {symbol} is not allowed, order_send() failed.")
-        mt5.shutdown()
-        return None
-
     point = symbol_info.point
     if order_type == 'BUY':
         order_type_mt5 = mt5.ORDER_TYPE_BUY
@@ -42,7 +37,7 @@ def order_send(symbol, order_type, volume, price=None, slippage=2, magic=0, comm
         "magic": magic,
         "comment": comment,
         "type_time": mt5.ORDER_TIME_GTC,  # Good till cancel
-        "type_filling": mt5.ORDER_FILLING_IOC,  # Immediate or cancel
+        "type_filling": mt5.ORDER_FILLING_FOK,  # Immediate or cancel
     }
 
     result = mt5.order_send(request)
