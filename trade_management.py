@@ -24,7 +24,6 @@ def order_send(symbol, order_type, volume, price=None, slippage=2, magic=0, comm
         price = mt5.symbol_info_tick(symbol).bid if price is None else price
     else:
         print(f"Invalid order type: {order_type}")
-        mt5.shutdown()
         return None
 
     request = {
