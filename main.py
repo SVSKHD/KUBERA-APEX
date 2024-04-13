@@ -6,7 +6,7 @@ from trade_logic import check_price_difference
 account_number = 212792645  # Your account number
 password = 'pn^eNL4U'  # Your password
 server = 'OctaFX-Demo'  # Your server
-symbol = 'EURUSD'  # Symbol to observe
+symbol = 'BTCUSD'  # Symbol to observe
 
 
 def main():
