@@ -39,7 +39,6 @@ def close_position(ticket):
     position = mt5.positions_get(ticket=ticket)
     if position is None or len(position) == 0:
         print(f"No position found with ticket ID {ticket}")
-        mt5.shutdown()
         return False
 
     position = position[0]  # Get the position object from the tuple
