@@ -14,22 +14,26 @@ def calculate_crypto_profit(position, current_price):
 def calculate_currency_profit(position, current_price):
     return (current_price - position.price_open) * (1 if position.type == 0 else -1) * position.volume * 100000
 
-def print_open_positions():
-    total_loss = 0
-    account_info = mt5.account_info()
-    initial_balance = account_info.balance
-    positions = mt5.positions_get()
-    if positions:
+def fetch_positions(page_size=50):
+    try:
+        positions = mt5.positions_get()
         for position in positions:
-            current_price = mt5.symbol_info_tick(position.symbol).bid if position.type == 0 else mt5.symbol_info_tick(position.symbol).ask
-            profit = calculate_crypto_profit(position, current_price) if 'BTC' in position.symbol else calculate_currency_profit(position, current_price)
-            total_loss += profit
-            print(f"Position ID: {position.ticket}, Symbol: {position.symbol}, Type: {'BUY' if position.type == 0 else 'SELL'}, Volume: {position.volume}, Open Price: {position.price_open}, Current Price: {current_price}, Profit: {profit:.2f} USD")
-    else:
-        print("No open positions currently.")
-    loss_percentage = (total_loss / initial_balance) * 100
-    print(f"Total running loss/gain: {total_loss:.2f} USD, which is {loss_percentage:.2f}% of the initial balance: {initial_balance:.2f}")
-    return loss_percentage, positions
+            yield position
+    except Exception as e:
+        print(f"Failed to fetch positions: {e}")
+        return []
+
+def print_open_positions():
+    """Prints all open positions and calculates the total loss percentage."""
+    total_loss = 0
+    count = 0
+    for position in fetch_positions():
+        print(f"Position ID: {position.ticket}, Profit: {position.profit}")
+        total_loss += position.profit  # Assuming profit can be negative for a loss
+        count += 1
+    loss_percentage = (total_loss / count) * 100 if count > 0 else 0
+    print(f"Total Loss Percentage: {loss_percentage}%")
+    return loss_percentage, count
 
 
 def check_and_close_trades():
