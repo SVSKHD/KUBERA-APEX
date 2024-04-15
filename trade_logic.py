@@ -45,9 +45,12 @@ def check_price_difference(symbol):
     high_diff, low_diff = calculate_pip_differences(high, low, current_price)
     print(f"Live Price for {symbol}: {current_price}, High Diff: {high_diff}, Low Diff: {low_diff}")
 
-    loss_percentage, _ = print_open_positions()
+    # Corrected to unpack all three returned values
+    loss_percentage, _, positions = print_open_positions()
+
     check_and_close_trades()
     check_loss_and_close_trades(loss_percentage)
 
     if last_trade["price"] is None or abs(last_trade["price"] - current_price) >= pip_difference * pip_size:
         make_trading_decision(symbol, high_diff, low_diff, current_price, pip_difference)
+

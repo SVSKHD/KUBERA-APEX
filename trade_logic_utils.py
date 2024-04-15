@@ -1,6 +1,10 @@
 import MetaTrader5 as mt5
 import math
+from risk_management import close_position, close_all_trades
 
+opposite_pip_move = 10
+pip_size = 0.0001
+last_trade = {"price": None, "direction": None}
 
 def scale_number(num):
     if num == 0:
@@ -24,25 +28,29 @@ def fetch_positions():
         return []
 
 def print_open_positions():
-    """Prints all open positions and calculates the total loss percentage."""
     total_loss = 0
     count = 0
+    positions_list = []
     for position in fetch_positions():
         print(f"Position ID: {position.ticket}, Profit: {position.profit}")
         total_loss += position.profit  # Assuming profit can be negative for a loss
         count += 1
-    loss_percentage = (total_loss / count) * 100 if count > 0 else 0
+        positions_list.append(position)
+    account_info = mt5.account_info()
+    if account_info is not None:
+        account_equity = account_info.equity
+        loss_percentage = (total_loss / account_equity) * 100  # Loss percentage based on total equity
+    else:
+        loss_percentage = 0  # Default to 0 if account info is not available
     print(f"Total Loss Percentage: {loss_percentage}%")
-    return loss_percentage, count
-
+    return loss_percentage, count, positions_list
 
 def check_and_close_trades():
-    _, positions = print_open_positions()  # Retrieve the latest positions
+    _, _, positions = print_open_positions()
     for position in positions:
         current_price = mt5.symbol_info_tick(position.symbol).ask if position.type == 0 else mt5.symbol_info_tick(position.symbol).bid
         price_diff = (current_price - position.price_open) / pip_size
-        if (position.type == 0 and price_diff <= -opposite_pip_move) or \
-           (position.type == 1 and price_diff >= opposite_pip_move):
+        if (position.type == 0 and price_diff <= -opposite_pip_move) or (position.type == 1 and price_diff >= opposite_pip_move):
             print(f"Closing Position ID {position.ticket} due to price movement against position by {opposite_pip_move} pips.")
             close_position(position.ticket)
         else:
