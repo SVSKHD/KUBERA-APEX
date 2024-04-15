@@ -73,7 +73,6 @@ def close_position(ticket):
     result = mt5.order_send(request)
     if result.retcode != mt5.TRADE_RETCODE_DONE:
         print(f"Failed to close position {ticket}. Error code: {result.retcode}")
-        mt5.shutdown()
         return False
 
     print(f"Position {ticket} closed successfully.")
