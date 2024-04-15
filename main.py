@@ -11,7 +11,7 @@ password = 'pn^eNL4U'  # Your password
 server = 'OctaFX-Demo'  # Your server
 
 # Symbols for trading on weekdays and weekends
-weekday_symbols = ['EURUSD', 'GBPUSD', 'USDJPY']  # Typical Forex currencies
+weekday_symbols = ['EURUSD', 'GBPUSD']  # Typical Forex currencies
 weekend_symbols = ['BTCUSD', 'ETHUSD']  # Major cryptocurrencies
 
 
