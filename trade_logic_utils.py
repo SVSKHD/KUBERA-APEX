@@ -14,7 +14,7 @@ def calculate_crypto_profit(position, current_price):
 def calculate_currency_profit(position, current_price):
     return (current_price - position.price_open) * (1 if position.type == 0 else -1) * position.volume * 100000
 
-def fetch_positions(page_size=50):
+def fetch_positions():
     try:
         positions = mt5.positions_get()
         for position in positions:
