@@ -1,7 +1,7 @@
 import MetaTrader5 as mt5
 from trade_management import order_send
-from trade_logic_utils import scale_number, calculate_crypto_profit, calculate_currency_profit, print_open_positions, check_and_close_trades, check_loss_and_close_trades
-from risk_management import close_all_trades, close_position  # Assume close_position function is correctly implemented to close individual positions
+from trade_logic_utils import scale_number, calculate_crypto_profit, calculate_currency_profit, print_open_positions, check_and_close_trades, check_loss_and_close_trades , check_profit_and_close_trades
+from risk_management import close_all_trades, close_position
 import math
 
 CANDLE_DATA = 50
@@ -46,10 +46,11 @@ def check_price_difference(symbol):
     print(f"Live Price for {symbol}: {current_price}, High Diff: {high_diff}, Low Diff: {low_diff}")
 
     # Corrected to unpack all three returned values
-    loss_percentage, _, positions = print_open_positions()
+    loss_percentage, profit_percentage , _, positions  = print_open_positions()
 
     check_and_close_trades()
     check_loss_and_close_trades(loss_percentage)
+    check_profit_and_close_trades(profit_percentage)
 
     if last_trade["price"] is None or abs(last_trade["price"] - current_price) >= pip_difference * pip_size:
         make_trading_decision(symbol, high_diff, low_diff, current_price, pip_difference)

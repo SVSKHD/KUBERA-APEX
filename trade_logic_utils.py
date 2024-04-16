@@ -29,24 +29,31 @@ def fetch_positions():
 
 def print_open_positions():
     total_loss = 0
+    total_profit = 0  # Initialize total_profit
     count = 0
     positions_list = []
     for position in fetch_positions():
         print(f"Position ID: {position.ticket}, Profit: {position.profit}")
-        total_loss += position.profit  # Assuming profit can be negative for a loss
+        if position.profit < 0:
+            total_loss += position.profit
+        else:
+            total_profit += position.profit  # Accumulate profit here
         count += 1
         positions_list.append(position)
     account_info = mt5.account_info()
     if account_info is not None:
         account_equity = account_info.equity
-        loss_percentage = (total_loss / account_equity) * 100  # Loss percentage based on total equity
+        loss_percentage = (total_loss / account_equity) * 100
+        profit_percentage = (total_profit / account_equity) * 100  # Calculate profit percentage
     else:
-        loss_percentage = 0  # Default to 0 if account info is not available
+        loss_percentage = 0
+        profit_percentage = 0  # Default to 0 if account info is not available
     print(f"Total Loss Percentage: {loss_percentage}%")
-    return loss_percentage, count, positions_list
+    print(f"Total Profit Percentage: {profit_percentage}%")  # Print total profit percentage
+    return loss_percentage, profit_percentage, count, positions_list
 
 def check_and_close_trades():
-    _, _, positions = print_open_positions()
+    _, profit_percentage, _, positions = print_open_positions()
     for position in positions:
         current_price = mt5.symbol_info_tick(position.symbol).ask if position.type == 0 else mt5.symbol_info_tick(position.symbol).bid
         price_diff = (current_price - position.price_open) / pip_size
@@ -59,5 +66,11 @@ def check_and_close_trades():
 def check_loss_and_close_trades(loss_percentage):
     if loss_percentage <= -1:
         print(f"Closing all trades due to a loss exceeding 1% of the account balance.")
+        close_all_trades()
+        last_trade.update({"price": None, "direction": None})
+
+def check_profit_and_close_trades(profit_percentage):
+    if profit_percentage >= 2.5:
+        print(f"Closing all trades due to a profit exceeding 2.5% of the account balance.")
         close_all_trades()
         last_trade.update({"price": None, "direction": None})
