@@ -10,42 +10,42 @@ server = 'OctaFX-Demo'  # Replace with your MT5 server name
 def connect_to_mt5(account_number, password, server):
     # Initialize MT5 connection
     if not mt5.initialize():
-        print("initialize() failed, error code =", mt5.last_error())
+        print("S.py : initialize() failed, error code =", mt5.last_error())
         return False
 
     # Connect to the trading account
     authorized = mt5.login(account_number, password=password, server=server)
     if not authorized:
-        print("login() failed, error code =", mt5.last_error())
+        print("S.py : login() failed, error code =", mt5.last_error())
         mt5.shutdown()
         return False
 
-    print("Connected to MT5 account #{}".format(account_number))
+    print("S.py : Connected to MT5 account #{}".format(account_number))
     return True
 
 
 def get_account_balance():
     if mt5.terminal_info() is None:
-        print("Not connected to MT5.")
+        print("S.py : Not connected to MT5.")
         return
 
     # Get account info
     account_info = mt5.account_info()
     if account_info is None:
-        print("Failed to get account info, error code =", mt5.last_error())
+        print("S.py : Failed to get account info, error code =", mt5.last_error())
     else:
-        print("Account Balance: ", account_info.balance)
+        print("S.py :  Account Balance: ", account_info.balance)
 
 
 def calculate_open_trades_profit_loss_percentages_and_close():
     if not mt5.terminal_info():
-        print("Not connected to MT5.")
+        print("S.py : Not connected to MT5.")
         return
 
     # Get the current open trades
     open_trades = mt5.positions_get()
     if open_trades is None or len(open_trades) == 0:
-        print("No open trades or failed to retrieve trades, error code =", mt5.last_error())
+        print("S.py : No open trades or failed to retrieve trades, error code =", mt5.last_error())
         return
 
     total_profit = sum(trade.profit for trade in open_trades if trade.profit > 0)
@@ -54,7 +54,7 @@ def calculate_open_trades_profit_loss_percentages_and_close():
     # Get account info for total capital
     account_info = mt5.account_info()
     if account_info is None:
-        print("Failed to get account info, error code =", mt5.last_error())
+        print("S.py : Failed to get account info, error code =", mt5.last_error())
         return
     total_capital = account_info.balance
 

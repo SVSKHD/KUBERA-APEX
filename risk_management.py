@@ -31,7 +31,7 @@ def close_all_trades():
             if result.retcode != mt5.TRADE_RETCODE_DONE:
                 print(f"Failed to close position {position_id}: {result}")
             else:
-                print(f"Position {position_id} closed successfully.")
+                print(f"RM.py : Position {position_id} closed successfully.")
 
 
 def close_position(ticket):
@@ -75,5 +75,5 @@ def close_position(ticket):
         print(f"Failed to close position {ticket}. Error code: {result.retcode}")
         return False
 
-    print(f"Position {ticket} closed successfully.")
+    print(f"RM.py : Position {ticket} closed successfully.")
     return True
