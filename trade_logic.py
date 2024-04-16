@@ -4,7 +4,7 @@ from trade_logic_utils import scale_number, calculate_crypto_profit, calculate_c
 from risk_management import close_all_trades, close_position
 import math
 
-CANDLE_DATA = 50
+CANDLE_DATA = 20
 pip_size = 0.0001
 opposite_pip_move = 10  # Pip difference to check for the opposite market move
 
@@ -27,6 +27,11 @@ def calculate_pip_differences(high, low, current_price):
 def make_trading_decision(symbol, high_diff, low_diff, current_price, pip_difference):
     """Make trading decision based on the price differences and update last trade."""
     global last_trade
+    # Ensure there is a significant pip difference from the last opened position before making a new trade
+    if last_trade["price"] is not None and abs(last_trade["price"] - current_price) < pip_difference * pip_size:
+        print(f"No trade for {symbol} due to insufficient price movement from last trade.")
+        return
+
     if high_diff <= pip_difference:
         print(f"High price proximity alert for {symbol}. Possible SELL.")
         order_send(symbol, 'SELL', 0.01)
@@ -45,13 +50,12 @@ def check_price_difference(symbol):
     high_diff, low_diff = calculate_pip_differences(high, low, current_price)
     print(f"Live Price for {symbol}: {current_price}, High Diff: {high_diff}, Low Diff: {low_diff}")
 
-    # Corrected to unpack all three returned values
     loss_percentage, profit_percentage , _, positions  = print_open_positions()
 
     check_and_close_trades()
     check_loss_and_close_trades(loss_percentage)
     check_profit_and_close_trades(profit_percentage)
 
-    if last_trade["price"] is None or abs(last_trade["price"] - current_price) >= pip_difference * pip_size:
-        make_trading_decision(symbol, high_diff, low_diff, current_price, pip_difference)
+    # Added a new condition to check against the last trade's price
+    make_trading_decision(symbol, high_diff, low_diff, current_price, pip_difference)
 
