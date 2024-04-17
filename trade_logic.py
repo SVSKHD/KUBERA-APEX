@@ -9,7 +9,6 @@ pip_size = 0.0001
 reference_price = None
 last_trade = {"price": None, "direction": None, "count": 0}
 
-
 def retrieve_market_data(symbol):
     rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_H1, 0, CANDLE_DATA)
     high = max(rate['high'] for rate in rates)
@@ -17,17 +16,21 @@ def retrieve_market_data(symbol):
     current_price = mt5.symbol_info_tick(symbol).ask
     return high, low, current_price
 
-
 def calculate_pip_differences(high, low, current_price):
     high_diff = abs(high - current_price) / pip_size
     low_diff = abs(current_price - low) / pip_size
     return high_diff, low_diff
 
+def current_open_trades_count():
+    open_trades = mt5.positions_get()
+    if open_trades is None:
+        return 0  # Error or no open trades
+    return len(open_trades)
 
 def make_trading_decision(symbol, high_diff, low_diff, current_price, pip_difference):
     global last_trade, reference_price
-    if last_trade["count"] >= 4:
-        print(f"Maximum trade limit reached for {symbol}. No further trades will be executed.")
+    if current_open_trades_count() >= 4:
+        print(f"Trade limit reached or exceeded for {symbol}. No further trades will be executed.")
         return
 
     if last_trade["price"] is not None:
@@ -49,14 +52,12 @@ def make_trading_decision(symbol, high_diff, low_diff, current_price, pip_differ
     else:
         print(f"No trade executed for {symbol}. Required pip difference not achieved (last diff: {last_pip_diff:.2f}).")
 
-
 def check_price_difference(symbol):
     pip_difference = 2000 if symbol == "BTCUSD" else 15
     high, low, current_price = retrieve_market_data(symbol)
     high_diff, low_diff = calculate_pip_differences(high, low, current_price)
-    print(f"Current Price: {current_price}, High Diff: {high_diff}, Low Diff: {low_diff} reference : {reference_price}")
+    print(f"Current Price: {current_price}, High Diff: {high_diff}, Low Diff: {low_diff}, Reference Price: {reference_price}")
     make_trading_decision(symbol, high_diff, low_diff, current_price, pip_difference)
     check_and_close_trades()
     check_loss_and_close_trades(1)  # Example percentage
     check_profit_and_close_trades(2)  # Example percentage
-
