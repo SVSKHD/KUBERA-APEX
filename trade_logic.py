@@ -54,7 +54,7 @@ def check_price_difference(symbol):
     pip_difference = 2000 if symbol == "BTCUSD" else 15
     high, low, current_price = retrieve_market_data(symbol)
     high_diff, low_diff = calculate_pip_differences(high, low, current_price)
-    print(f"Current Price: {current_price}, High Diff: {high_diff}, Low Diff: {low_diff}")
+    print(f"Current Price: {current_price}, High Diff: {high_diff}, Low Diff: {low_diff} reference : {reference_price}")
     make_trading_decision(symbol, high_diff, low_diff, current_price, pip_difference)
     check_and_close_trades()
     check_loss_and_close_trades(1)  # Example percentage
