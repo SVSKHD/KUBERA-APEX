@@ -130,33 +130,48 @@ def get_live_price(symbol):
 
 # Observe price and check for 15 pip difference
 def observe_price(symbol, pip_diff=15, volume=0.01):
-    initial_price = get_live_price(symbol)
-    if initial_price is None:
+    # Ensure the symbol is available in MT5
+    if not mt5.symbol_select(symbol, True):
+        print(f"Failed to select {symbol}, symbol not found on MT5.")
         mt5.shutdown()
         return
+
+    # Get the initial price using MT5's one-hour timeframe data
+    rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_H1, 0, 1)
+    if rates is None or len(rates) == 0:
+        print(f"Failed to get rates for {symbol}.")
+        mt5.shutdown()
+        return
+
+    initial_price = rates[0]['close']
     print(f"Initial price for {symbol}: {initial_price}")
+
     try:
-        while True:
-            current_price = get_live_price(symbol)
-            if current_price is None:
-                continue
+        # Check price changes within the next hour
+        end_time = time.time() + 3600  # Current time + 3600 seconds (1 hour)
+        while time.time() < end_time:
+            current_rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_H1, 0, 1)
+            if current_rates is None or len(current_rates) == 0:
+                continue  # Try again if no rates were retrieved
 
+            current_price = current_rates[0]['close']
             pip_scale = 0.0001 if not symbol.endswith("JPY") else 0.01
-
             difference = (current_price - initial_price) / pip_scale
+
             if abs(difference) >= pip_diff:
                 direction = "increased" if difference > 0 else "decreased"
-                print(f"15 pip {direction} reached for {symbol}: {current_price} ({difference:+.2f} pips)")
+                print(f"{pip_diff} pip {direction} reached for {symbol}: {current_price} ({difference:+.2f} pips)")
 
                 # Determine the order type based on direction of price movement
                 order_type = 'BUY' if direction == "increased" else 'SELL'
                 # Send the order
                 order_send(symbol, order_type, volume)
-                break
+                break  # Exit after placing an order
 
-            time.sleep(1)
+            time.sleep(10)  # Check approximately every 10 seconds
 
     finally:
+        # Ensure the MetaTrader 5 terminal is properly shut down after the observation
         mt5.shutdown()
 
 
