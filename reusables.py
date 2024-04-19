@@ -134,9 +134,7 @@ def observe_price(symbol, pip_diff=15, volume=0.01):
     if initial_price is None:
         mt5.shutdown()
         return
-
     print(f"Initial price for {symbol}: {initial_price}")
-
     try:
         while True:
             current_price = get_live_price(symbol)
