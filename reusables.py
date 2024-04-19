@@ -129,39 +129,55 @@ def get_live_price(symbol):
 
 
 # Observe price and check for 15 pip difference
-def observe_price(symbol, pip_diff=15, volume=0.01):
+
+
+def observe_price(symbol, pip_diff=15, volume=0.01, stop_loss_pips=10):
+    # Ensure the symbol is available in MT5
     if not mt5.symbol_select(symbol, True):
         print(f"Failed to select {symbol}, symbol not found on MT5.")
         mt5.shutdown()
         return
 
+    # Get the initial tick data for real-time analysis
     initial_tick = mt5.symbol_info_tick(symbol)
     if initial_tick is None:
-        print("Failed to get initial tick for", symbol)
+        print("Failed to get tick data for", symbol)
         mt5.shutdown()
         return
-    initial_price = initial_tick.ask  # Use ask price for more immediacy in price data
+    last_traded_price = initial_tick.ask  # Start with the current ask price
 
-    print(f"Initial price for {symbol}: {initial_price}")
-    end_time = time.time() + 3600
+    print(f"Starting observation for {symbol} at price: {last_traded_price}")
 
     try:
-        while time.time() < end_time:
+        while True:
             current_tick = mt5.symbol_info_tick(symbol)
             if current_tick is None:
-                continue
-            current_price = current_tick.ask  # Consistently using ask price
+                continue  # Skip this iteration if tick data is not available
 
+            current_price = current_tick.ask
             pip_scale = 0.0001 if not symbol.endswith("JPY") else 0.01
-            difference = (current_price - initial_price) / pip_scale
+            difference = (current_price - last_traded_price) / pip_scale
+
+            # Check if the price has moved 15 pips away from the last traded price
             if abs(difference) >= pip_diff:
                 direction = "increased" if difference > 0 else "decreased"
-                print(f"{pip_diff} pip {direction} reached for {symbol}: {current_price} ({difference:+.2f} pips)")
-                order_type = 'BUY' if direction == "increased" else 'SELL'
-                order_send(symbol, order_type, volume)
-                break
+                print(
+                    f"{pip_diff} pip {direction} reached for {symbol} at price: {current_price} ({difference:+.2f} pips)")
 
-            time.sleep(10)
+                order_type = 'BUY' if direction == "increased" else 'SELL'
+                order_send(symbol, order_type, volume)  # Execute the trade
+                last_traded_price = current_price  # Update the last traded price to current
+                print(f"New base price for next trade: {last_traded_price}")
+
+            # Monitoring for stop loss condition
+            loss_difference = (current_price - last_traded_price) / pip_scale
+            if (order_type == 'BUY' and loss_difference <= -stop_loss_pips) or (
+                    order_type == 'SELL' and loss_difference >= stop_loss_pips):
+                print(f"Market moved {stop_loss_pips} pips against the position; closing all trades.")
+                close_all_trades()  # Close all trades if the market moves 10 pips against the trade
+                break  # Optional: stop the function after closing trades to reassess strategy
+
+            time.sleep(1)  # Small delay to prevent excessive CPU usage
     finally:
         mt5.shutdown()
 
