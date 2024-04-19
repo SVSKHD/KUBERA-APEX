@@ -130,48 +130,39 @@ def get_live_price(symbol):
 
 # Observe price and check for 15 pip difference
 def observe_price(symbol, pip_diff=15, volume=0.01):
-    # Ensure the symbol is available in MT5
     if not mt5.symbol_select(symbol, True):
         print(f"Failed to select {symbol}, symbol not found on MT5.")
         mt5.shutdown()
         return
 
-    # Get the initial price using MT5's one-hour timeframe data
-    rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_H1, 0, 1)
-    if rates is None or len(rates) == 0:
-        print(f"Failed to get rates for {symbol}.")
+    initial_tick = mt5.symbol_info_tick(symbol)
+    if initial_tick is None:
+        print("Failed to get initial tick for", symbol)
         mt5.shutdown()
         return
+    initial_price = initial_tick.ask  # Use ask price for more immediacy in price data
 
-    initial_price = rates[0]['close']
     print(f"Initial price for {symbol}: {initial_price}")
+    end_time = time.time() + 3600
 
     try:
-        # Check price changes within the next hour
-        end_time = time.time() + 3600  # Current time + 3600 seconds (1 hour)
         while time.time() < end_time:
-            current_rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_H1, 0, 1)
-            if current_rates is None or len(current_rates) == 0:
-                continue  # Try again if no rates were retrieved
+            current_tick = mt5.symbol_info_tick(symbol)
+            if current_tick is None:
+                continue
+            current_price = current_tick.ask  # Consistently using ask price
 
-            current_price = current_rates[0]['close']
             pip_scale = 0.0001 if not symbol.endswith("JPY") else 0.01
             difference = (current_price - initial_price) / pip_scale
-
             if abs(difference) >= pip_diff:
                 direction = "increased" if difference > 0 else "decreased"
                 print(f"{pip_diff} pip {direction} reached for {symbol}: {current_price} ({difference:+.2f} pips)")
-
-                # Determine the order type based on direction of price movement
                 order_type = 'BUY' if direction == "increased" else 'SELL'
-                # Send the order
                 order_send(symbol, order_type, volume)
-                break  # Exit after placing an order
+                break
 
-            time.sleep(10)  # Check approximately every 10 seconds
-
+            time.sleep(10)
     finally:
-        # Ensure the MetaTrader 5 terminal is properly shut down after the observation
         mt5.shutdown()
 
 
