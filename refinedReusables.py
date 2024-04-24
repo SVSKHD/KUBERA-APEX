@@ -1,4 +1,5 @@
 import MetaTrader5 as mt5
+import time
 
 
 def get_account_balance():
@@ -33,7 +34,7 @@ def connect_to_mt5(account_number, password, server):
         return False
 
 
-# ------------------------------------------------------------------------------- close-all-orders
+# ------------------------------------------------------------------------------- manage-orders
 
 
 def close_all_trades():
@@ -67,3 +68,49 @@ def close_all_trades():
                 print(f"Failed to close position {position_id}: {result}")
             else:
                 print(f"reusabale.py : Position {position_id} closed successfully.")
+
+
+# ---------------------------------------------------------------------------------- main logic
+def calculate_pips(price1, price2, symbol_info):
+    return (price1 - price2) / symbol_info.point
+
+
+def trading_logic(symbol, lot, pips_interval, opposite_direction_tolerance):
+    if not mt5.symbol_select(symbol, True):
+        print(f"{symbol} is not available, can not proceed.")
+        return
+
+    symbol_info = mt5.symbol_info(symbol)
+    if symbol_info is None:
+        print(f"{symbol} not found, can not proceed.")
+        return
+
+    entry_price = mt5.symbol_info_tick(symbol).ask
+
+    try:
+        while True:
+            current_price = mt5.symbol_info_tick(symbol).ask
+
+            # Check if the current price has moved 15 pips from the last entry price
+            if calculate_pips(current_price, entry_price, symbol_info) >= pips_interval:
+                # Logic to place a trade, this function should be defined elsewhere
+                # place_trade(symbol, lot, mt5.ORDER_TYPE_BUY, current_price)
+                print(f"Placing trade at {current_price}")
+                # Update the entry price for the next interval
+                entry_price = current_price
+
+            # If the market moves in the opposite direction, close all trades
+            if calculate_pips(entry_price, current_price, symbol_info) >= opposite_direction_tolerance:
+                close_all_trades()
+                print("Closed all trades due to adverse price movement.")
+                # Reset the entry price
+                entry_price = current_price
+
+            time.sleep(1)  # Control the frequency of the while loop
+
+    except KeyboardInterrupt:
+        print("Script interrupted by user")
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+    finally:
+        mt5.shutdown()  # Disconnect from the MT5 terminal
