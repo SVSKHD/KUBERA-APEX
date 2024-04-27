@@ -70,6 +70,28 @@ def is_hammer(candle):
     return body <= candle_range * 0.3 and lower_wick >= body * 2 and upper_wick <= body * 0.5
 
 
+def is_engulfing(candle1, candle2):
+    """
+    Determine if the second candle engulfs the first one.
+
+    Args:
+        candle1 (dict): The first candle.
+        candle2 (dict): The second candle, which potentially engulfs the first.
+
+    Returns:
+        str: 'BULLISH' if bullish engulfing, 'BEARISH' if bearish engulfing, 'NONE' otherwise.
+    """
+    # Check for bullish engulfing
+    if candle2['open'] < candle2['close'] and candle1['open'] > candle1['close']:
+        if candle2['open'] <= candle1['close'] and candle2['close'] >= candle1['open']:
+            return 'BULLISH'
+    # Check for bearish engulfing
+    elif candle2['open'] > candle2['close'] and candle1['open'] < candle1['close']:
+        if candle2['open'] >= candle1['open'] and candle2['close'] <= candle1['close']:
+            return 'BEARISH'
+    return 'NONE'
+
+
 def determine_market_trend(symbol):
     """
     Determine the market trend by identifying the presence of a hammer candlestick pattern.
