@@ -1,48 +1,60 @@
 import MetaTrader5 as mt5
 import time
-
-# Import additional necessary modules
 from datetime import datetime
+import threading
+from reusables import connect_to_mt5, get_account_balance, observe_price, manage_trades
 
-# Reuse the existing functions here by either copying them directly or importing from another module if they are separated
-# Assuming the functions are imported from a module named trading_functions
-from trading_functions import connect_to_mt5, get_account_balance, order_send, close_all_trades, observe_price
+def start_trading(symbol, pip_diff, volume, max_trades, minimal_profit):
+    try:
+        while True:
+            current_time = datetime.now()
+            print(f"{symbol}: Observing market at {current_time.strftime('%Y-%m-%d %H:%M:%S')}")
+
+            # Observe price movements and potentially execute trades
+            observe_price(symbol, pip_diff, volume, stop_loss_pips=10000)
+
+            # Manage existing trades based on current market conditions
+            manage_trades(symbol, 'buy', max_trades, minimal_profit)
+
+            print(f"{symbol}: Waiting for the next hour check...")
+            time.sleep(1)  # Sleep for 1 hour
+
+    except Exception as e:
+        print(f"Error with {symbol}: {str(e)}")
 
 def main():
-    account_number = 123456  # your MetaTrader account number
-    password = "your_password"  # your MetaTrader password
-    server = "MetaQuotes-Demo"  # your MetaTrader server
+    account_number = 212792645
+    password = 'pn^eNL4U'
+    server = 'OctaFX-Demo'
 
-    # Connect to MT5
     if not connect_to_mt5(account_number, password, server):
         print("Failed to connect to MT5, exiting.")
         return
 
-    symbol = "EURUSD"  # Symbol to be observed
-    pip_diff = 15  # Pip difference to trigger trade action
-    volume = 0.01  # Volume of the trade
+    get_account_balance()
 
-    # Main loop to observe the price at a 1-hour interval
-    try:
-        while True:
-            current_time = datetime.now()
-            print(f"Observing market at {current_time.strftime('%Y-%m-%d %H:%M:%S')}")
+    volume = 0.1
+    max_trades = 4
+    minimal_profit = 10
 
-            # Observe price movement and potentially execute trades
-            observe_price(symbol, pip_diff, volume)
+    # Define symbols and settings based on the day of the week
+    weekday_symbols = {'EURUSD': 10, 'GBPUSD': 10}
+    weekend_symbols = {'BTCUSD': 25000, 'ETHUSD': 25000}
 
-            # Wait for one hour before next check
-            print("Waiting for the next hour check...")
-            time.sleep(3600)  # Sleep time is in seconds (3600 seconds = 1 hour)
+    # Determine the current day and choose the symbol set
+    current_day = datetime.now().weekday()  # Monday is 0 and Sunday is 6
+    symbols = weekend_symbols if current_day in [5, 6] else weekday_symbols
 
-    except KeyboardInterrupt:
-        print("Shutdown requested by user")
-    except Exception as e:
-        print("Error occurred:", str(e))
-    finally:
-        # Ensure MT5 is properly shut down
-        if mt5.terminal_info() is not None:
-            mt5.shutdown()
+    # Create threads for each symbol
+    threads = []
+    for symbol, pip_diff in symbols.items():
+        t = threading.Thread(target=start_trading, args=(symbol, pip_diff, volume, max_trades, minimal_profit))
+        threads.append(t)
+        t.start()
+
+    # Wait for all threads to complete (which they never will under normal conditions)
+    for t in threads:
+        t.join()
 
 if __name__ == "__main__":
     main()
