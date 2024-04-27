@@ -47,6 +47,60 @@ def adjust_price(price, symbol_info):
     price_scale = round(-math.log10(point))
     return round(price, price_scale)
 
+# Trade Methods ---------------------------------------------------------------------------------------------------------------------------------Section>
+
+
+def is_hammer(candle):
+    """
+    Determine if a candlestick is a hammer.
+
+    Args:
+        candle (dict): A dictionary containing open, high, low, and close prices of a candle.
+
+    Returns:
+        bool: True if the candle is a hammer, False otherwise.
+    """
+    # Define the criteria for a hammer
+    body = abs(candle['close'] - candle['open'])
+    candle_range = candle['high'] - candle['low']
+    lower_wick = min(candle['close'], candle['open']) - candle['low']
+    upper_wick = candle['high'] - max(candle['close'], candle['open'])
+
+    # Hammer: small body, long lower wick, very small or no upper wick
+    return body <= candle_range * 0.3 and lower_wick >= body * 2 and upper_wick <= body * 0.5
+
+
+def determine_market_trend(symbol):
+    """
+    Determine the market trend by identifying the presence of a hammer candlestick pattern.
+
+    Args:
+        symbol (str): The trading symbol (e.g., 'EURUSD').
+
+    Returns:
+        str: 'BULLISH' if a hammer pattern is found, 'BEARISH' otherwise.
+    """
+    # Ensure the symbol is available
+    if not mt5.symbol_select(symbol, True):
+        print(f"Symbol {symbol} not available")
+        return 'INDETERMINATE'
+
+    # Define the timeframe
+    timeframe = mt5.TIMEFRAME_H1
+
+    # Retrieve the latest candle
+    candles = mt5.copy_rates_from_pos(symbol, timeframe, 0, 1)
+
+    if candles is None:
+        print("Failed to retrieve candles")
+        return 'INDETERMINATE'
+
+    # Check if the latest candle is a hammer
+    if is_hammer(candles[0]):
+        return 'BULLISH'
+    else:
+        return 'BEARISH'
+
 
 # buy or close orders
 def order_send(symbol, order_type, volume, price=None, slippage=2, magic=0, comment=""):
@@ -85,6 +139,10 @@ def order_send(symbol, order_type, volume, price=None, slippage=2, magic=0, comm
         print(f"Order sent successfully, ticket={result.order}")
 
     return result
+
+
+
+
 
 
 
