@@ -1,6 +1,23 @@
 import MetaTrader5 as mt5
 import time
 import math
+import pytz
+import datetime
+
+
+# get account balance
+def get_account_balance():
+    if mt5.terminal_info() is None:
+        print("S.py : Not connected to MT5.")
+        return
+
+    # Get account info
+    account_info = mt5.account_info()
+    if account_info is None:
+        print("S.py : Failed to get account info, error code =", mt5.last_error())
+    else:
+        print("S.py :  Account Balance: ", account_info.balance)
+
 
 # start the connection between meta trader5 and app
 def connect_to_mt5(account_number, password, server):
@@ -20,20 +37,6 @@ def connect_to_mt5(account_number, password, server):
     return True
 
 
-# get account balance of logged in account creds
-def get_account_balance():
-    if mt5.terminal_info() is None:
-        print("S.py : Not connected to MT5.")
-        return
-
-    # Get account info
-    account_info = mt5.account_info()
-    if account_info is None:
-        print("S.py : Failed to get account info, error code =", mt5.last_error())
-    else:
-        print("S.py :  Account Balance: ", account_info.balance)
-
-
 def adjust_volume(volume, symbol_info):
     min_volume = symbol_info.volume_min
     step = symbol_info.volume_step
@@ -42,24 +45,52 @@ def adjust_volume(volume, symbol_info):
     volume = ((int((volume - min_volume) / step) + 1) * step) + min_volume if volume % step != 0 else volume
     return volume
 
+
 def adjust_price(price, symbol_info):
     point = symbol_info.point
     price_scale = round(-math.log10(point))
     return round(price, price_scale)
 
+
+# fetch-candels ---------------------------------------------------------------------------------------------------------------------------------Section>
+def fetch_bars(symbol, timeframe=mt5.TIMEFRAME_H1, count, utc_from=None, utc_to=datetime.now()):
+    timezone = pytz.utc  # Define timezone to UTC
+    if utc_from is None:
+        utc_from = utc_to - mt5.copy_rates_from_pos(symbol, timeframe, 0, count)[-1][
+            0]  # Calculate 'from' date based on count
+
+    # Set proper timezone for the datetime objects
+    utc_from = timezone.localize(utc_from)
+    utc_to = timezone.localize(utc_to)
+
+    # Check if the symbol is available in MT5
+    if not mt5.symbol_select(symbol, True):
+        print(f"Failed to select symbol {symbol}")
+        return None
+
+    # Fetch the bars from MT5
+    bars = mt5.copy_rates_range(symbol, timeframe, utc_from, utc_to)
+
+    if bars is None or len(bars) == 0:
+        print(f"Failed to fetch bars for {symbol}. Error code: {mt5.last_error()}")
+        return None
+
+    # Convert the result to a list of dictionaries to be more intuitive
+    bars_data = [{
+        'time': datetime.fromtimestamp(bar['time'], tz=timezone).strftime('%Y-%m-%d %H:%M:%S'),
+        'open': bar['open'],
+        'high': bar['high'],
+        'low': bar['low'],
+        'close': bar['close'],
+        'volume': bar['tick_volume']
+    } for bar in bars]
+
+    return bars_data
+
 # Trade Methods ---------------------------------------------------------------------------------------------------------------------------------Section>
 
 
 def is_hammer(candle):
-    """
-    Determine if a candlestick is a hammer.
-
-    Args:
-        candle (dict): A dictionary containing open, high, low, and close prices of a candle.
-
-    Returns:
-        bool: True if the candle is a hammer, False otherwise.
-    """
     # Define the criteria for a hammer
     body = abs(candle['close'] - candle['open'])
     candle_range = candle['high'] - candle['low']
@@ -70,18 +101,31 @@ def is_hammer(candle):
     return body <= candle_range * 0.3 and lower_wick >= body * 2 and upper_wick <= body * 0.5
 
 
+def is_morning_star(bars):
+    if len(bars) < 3:
+        return False
+
+    candle1, candle2, candle3 = bars[-3], bars[-2], bars[-1]
+    if candle1['close'] < candle1['open'] and candle3['close'] > candle3['open']:
+        if candle2['close'] < candle1['close'] and candle3['close'] > candle2['close'] and candle3['close'] > candle1[
+            'open']:
+            return True
+    return False
+
+
+def is_evening_star(bars):
+    if len(bars) < 3:
+        return False
+
+    candle1, candle2, candle3 = bars[-3], bars[-2], bars[-1]
+    if candle1['close'] > candle1['open'] and candle3['close'] < candle3['open']:
+        if candle2['close'] > candle1['close'] and candle3['close'] < candle2['close'] and candle3['close'] < candle1[
+            'open']:
+            return True
+    return False
+
+
 def is_engulfing(candle1, candle2):
-    """
-    Determine if the second candle engulfs the first one.
-
-    Args:
-        candle1 (dict): The first candle.
-        candle2 (dict): The second candle, which potentially engulfs the first.
-
-    Returns:
-        str: 'BULLISH' if bullish engulfing, 'BEARISH' if bearish engulfing, 'NONE' otherwise.
-    """
-    # Check for bullish engulfing
     if candle2['open'] < candle2['close'] and candle1['open'] > candle1['close']:
         if candle2['open'] <= candle1['close'] and candle2['close'] >= candle1['open']:
             return 'BULLISH'
@@ -92,36 +136,139 @@ def is_engulfing(candle1, candle2):
     return 'NONE'
 
 
-def determine_market_trend(symbol):
-    """
-    Determine the market trend by identifying the presence of a hammer candlestick pattern.
+def is_piercing_line(bars):
+    if len(bars) < 2:
+        return False
 
-    Args:
-        symbol (str): The trading symbol (e.g., 'EURUSD').
+    candle1, candle2 = bars[-2], bars[-1]
+    if candle1['open'] > candle1['close'] and candle2['open'] < candle1['low'] and candle2['close'] > (
+            candle1['open'] + candle1['close']) / 2:
+        return True
+    return False
 
-    Returns:
-        str: 'BULLISH' if a hammer pattern is found, 'BEARISH' otherwise.
-    """
-    # Ensure the symbol is available
-    if not mt5.symbol_select(symbol, True):
-        print(f"Symbol {symbol} not available")
-        return 'INDETERMINATE'
 
-    # Define the timeframe
-    timeframe = mt5.TIMEFRAME_H1
+def is_dark_cloud_cover(bars):
+    if len(bars) < 2:
+        return False
 
-    # Retrieve the latest candle
-    candles = mt5.copy_rates_from_pos(symbol, timeframe, 0, 1)
+    candle1, candle2 = bars[-2], bars[-1]
+    if candle1['open'] < candle1['close'] and candle2['open'] > candle1['high'] and candle2['close'] < (
+            candle1['open'] + candle1['close']) / 2:
+        return True
+    return False
 
-    if candles is None:
-        print("Failed to retrieve candles")
-        return 'INDETERMINATE'
 
-    # Check if the latest candle is a hammer
-    if is_hammer(candles[0]):
-        return 'BULLISH'
+def is_doji(bar):
+    body = abs(bar['close'] - bar['open'])
+    candle_range = bar['high'] - bar['low']
+    return body <= candle_range * 0.1
+
+
+def analyze_market_trend(bars):
+    bullish_signals = 0
+    bearish_signals = 0
+
+    # Check for Doji
+    if is_doji(bars[-1]):
+        # If Doji is found, check the next candle for confirmation
+        if len(bars) > 1:
+            next_candle_trend = is_engulfing(bars[-2:])
+            if next_candle_trend == 'BULLISH':
+                bullish_signals += 1
+            elif next_candle_trend == 'BEARISH':
+                bearish_signals += 1
+
+    # Check for Engulfing pattern
+    engulfing_trend = is_engulfing(bars[-2:])
+    if engulfing_trend == 'BULLISH':
+        bullish_signals += 1
+    elif engulfing_trend == 'BEARISH':
+        bearish_signals += 1
+
+    # Check for Morning Star and Evening Star
+    if len(bars) >= 3:
+        if is_morning_star(bars[-3:]):
+            bullish_signals += 1
+        if is_evening_star(bars[-3:]):
+            bearish_signals += 1
+
+    # Check for Piercing Line and Dark Cloud Cover
+    if is_piercing_line(bars[-2:]):
+        bullish_signals += 1
+    if is_dark_cloud_cover(bars[-2:]):
+        bearish_signals += 1
+
+    total_signals = bullish_signals + bearish_signals
+
+    # Determine the suggested trend and confidence level
+    if total_signals == 0:
+        suggested_trend = 'UNCERTAIN'
+        confidence = 0
+    elif bullish_signals > bearish_signals:
+        suggested_trend = 'BULLISH'
+        confidence = (bullish_signals / total_signals) * 100
     else:
-        return 'BEARISH'
+        suggested_trend = 'BEARISH'
+        confidence = (bearish_signals / total_signals) * 100
+
+    return {'trend': suggested_trend, 'confidence': confidence}
+
+
+def analyze_and_trade(symbol, bars):
+    analysis = analyze_market_trend(bars)
+    trend = analysis['trend']
+    confidence = analysis['confidence']
+
+    if trend == 'UNCERTAIN' or confidence < 50:  # Assuming 50% as a threshold for confidence
+        print(f"Market trend is uncertain or confidence is too low ({confidence}%), no trade initiated.")
+        return
+
+    print(f"Detected {trend} trend with {confidence}% confidence.")
+    # Ensure the symbol is available in MT5
+    if not mt5.symbol_select(symbol, True):
+        print(f"Failed to select {symbol}, symbol not found on MT5.")
+        return
+
+    # Get current price for the symbol
+    current_price = mt5.symbol_info_tick(symbol).ask if trend == 'BULLISH' else mt5.symbol_info_tick(symbol).bid
+    initial_price = current_price
+    volume = 0.1  # Example volume
+    order_type = 'BUY' if trend == 'BULLISH' else 'SELL'
+    order_sent = False
+    try:
+        while True:
+            current_tick = mt5.symbol_info_tick(symbol)
+            current_price = current_tick.ask if order_type == 'BUY' else current_tick.bid
+            pip_scale = 0.0001 if 'JPY' not in symbol else 0.01
+            price_difference = (current_price - initial_price) / pip_scale
+
+            # Check if the price has moved 15 pips in the direction of the trend before placing a trade
+            if not order_sent and ((order_type == 'BUY' and price_difference >= 15) or (order_type == 'SELL' and price_difference <= -15)):
+                result = order_send(symbol, order_type, volume, current_price)
+                if result and result.retcode == mt5.TRADE_RETCODE_DONE:
+                    print(f"Trade placed: {order_type} at {current_price}.")
+                    order_sent = True
+                    initial_price = current_price  # Update initial price to the price at which trade was executed
+                else:
+                    print("Failed to place trade.")
+                    break
+
+            # Check for opposite movement of 10 pips to close the trade
+            if order_sent:
+                loss_difference = (current_price - initial_price) / pip_scale
+                if (order_type == 'BUY' and loss_difference <= -10) or (order_type == 'SELL' and loss_difference >= 10):
+                    print("Market moved 10 pips against the position, closing trade.")
+                    close_all_trades()
+                    break
+
+            time.sleep(1)  # Delay to limit the frequency of API calls
+
+    except Exception as e:
+        print(f"Error during trading: {e}")
+    finally:
+        mt5.shutdown()
+
+    return
 
 
 # buy or close orders
@@ -140,7 +287,6 @@ def order_send(symbol, order_type, volume, price=None, slippage=2, magic=0, comm
     else:
         print("Invalid order type.")
         return None
-
 
     request = {
         "action": mt5.TRADE_ACTION_DEAL,
@@ -161,11 +307,6 @@ def order_send(symbol, order_type, volume, price=None, slippage=2, magic=0, comm
         print(f"Order sent successfully, ticket={result.order}")
 
     return result
-
-
-
-
-
 
 
 def close_all_trades():
@@ -234,7 +375,7 @@ def observe_price(symbol, pip_diff=15, volume=0.1, stop_loss_pips=10):
 
     print(f"Starting observation for {symbol} at price: {last_traded_price}")
 
-    order_type=None
+    order_type = None
 
     try:
         while True:
@@ -299,5 +440,3 @@ def close_position(position, minimal_profit):
             (position.type == mt5.ORDER_TYPE_SELL and (position.price - current_price) > minimal_profit):
         order_send(position.symbol, 'SELL' if position.type == mt5.ORDER_TYPE_BUY else 'BUY', position.volume,
                    current_price)
-
-
