@@ -2,7 +2,23 @@ import MetaTrader5 as mt5
 import time
 import math
 import pytz
-import datetime
+from datetime import datetime, timedelta
+
+
+def daily_trading_recommendations():
+    today = datetime.now()  # Now you can call datetime.now() directly
+    weekday = today.weekday()  # Monday is 0 and Sunday is 6
+
+    # Define trading pairs for weekends and weekdays
+    weekend_pairs = ['BTCUSD']
+    weekday_pairs = ['EURUSD', 'GBPUSD']
+
+    # Check if today is Saturday or Sunday
+    if weekday in [5, 6]:  # 5 is Saturday, 6 is Sunday
+        return f"Today is {'Saturday' if weekday == 5 else 'Sunday'}. Recommended trading pair: {', '.join(weekend_pairs)}"
+    else:
+        day_name = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'][weekday]
+        return f"Today is {day_name}. Recommended trading pairs: {', '.join(weekday_pairs)}"
 
 
 # get account balance
@@ -53,15 +69,29 @@ def adjust_price(price, symbol_info):
 
 
 # fetch-candels ---------------------------------------------------------------------------------------------------------------------------------Section>
-def fetch_bars(symbol, timeframe=mt5.TIMEFRAME_H1, count, utc_from=None, utc_to=datetime.now()):
+def fetch_bars(symbol, timeframe=mt5.TIMEFRAME_H1, count=100):
+    if not mt5.symbol_select(symbol, True):
+        print(f"Failed to select symbol {symbol}.")
+        return None
     timezone = pytz.utc  # Define timezone to UTC
-    if utc_from is None:
-        utc_from = utc_to - mt5.copy_rates_from_pos(symbol, timeframe, 0, count)[-1][
-            0]  # Calculate 'from' date based on count
 
-    # Set proper timezone for the datetime objects
-    utc_from = timezone.localize(utc_from)
-    utc_to = timezone.localize(utc_to)
+    # Fetch the latest bar time from MT5
+    recent_bars = mt5.copy_rates_from_pos(symbol, timeframe, 0, 1)
+    if recent_bars is None or len(recent_bars) == 0:
+        print(f"Failed to fetch recent bar for {symbol}. Error code: {mt5.last_error()}")
+        return None
+
+    # The latest bar's time needs to be converted to a datetime object
+    utc_to = datetime.fromtimestamp(recent_bars[0]['time'], tz=timezone)
+
+    # Calculate 'from' date based on count
+    utc_from = utc_to - timedelta(hours=count)
+
+    # Only localize if datetime objects are naive (lacking timezone info)
+    if utc_from.tzinfo is None:
+        utc_from = timezone.localize(utc_from)
+    if utc_to.tzinfo is None:
+        utc_to = timezone.localize(utc_to)
 
     # Check if the symbol is available in MT5
     if not mt5.symbol_select(symbol, True):
@@ -86,7 +116,6 @@ def fetch_bars(symbol, timeframe=mt5.TIMEFRAME_H1, count, utc_from=None, utc_to=
     } for bar in bars]
 
     return bars_data
-
 # Trade Methods ---------------------------------------------------------------------------------------------------------------------------------Section>
 
 
@@ -126,13 +155,29 @@ def is_evening_star(bars):
 
 
 def is_engulfing(candle1, candle2):
-    if candle2['open'] < candle2['close'] and candle1['open'] > candle1['close']:
+    """
+    Determine if the relationship between two consecutive candles forms an engulfing pattern.
+
+    Args:
+        candle1 (dict): The first candle with 'open', 'close', 'high', and 'low'.
+        candle2 (dict): The second candle with 'open', 'close', 'high', and 'low'.
+
+    Returns:
+        str: 'BULLISH' if a bullish engulfing pattern is found, 'BEARISH' if a bearish engulfing pattern is found,
+             'NONE' if no engulfing pattern is detected.
+    """
+    # Check for bullish engulfing:
+    # Candle1 is bearish and Candle2 is bullish and Candle2 engulfs Candle1
+    if candle1['open'] > candle1['close'] and candle2['open'] < candle2['close']:
         if candle2['open'] <= candle1['close'] and candle2['close'] >= candle1['open']:
             return 'BULLISH'
-    # Check for bearish engulfing
-    elif candle2['open'] > candle2['close'] and candle1['open'] < candle1['close']:
+
+    # Check for bearish engulfing:
+    # Candle1 is bullish and Candle2 is bearish and Candle2 engulfs Candle1
+    elif candle1['open'] < candle1['close'] and candle2['open'] > candle2['close']:
         if candle2['open'] >= candle1['open'] and candle2['close'] <= candle1['close']:
             return 'BEARISH'
+
     return 'NONE'
 
 
@@ -169,21 +214,22 @@ def analyze_market_trend(bars):
     bearish_signals = 0
 
     # Check for Doji
-    if is_doji(bars[-1]):
-        # If Doji is found, check the next candle for confirmation
+    if len(bars) > 0 and is_doji(bars[-1]):
+        # If Doji is found, check the next candle for confirmation if it exists
         if len(bars) > 1:
-            next_candle_trend = is_engulfing(bars[-2:])
+            next_candle_trend = is_engulfing(bars[-2], bars[-1])
             if next_candle_trend == 'BULLISH':
                 bullish_signals += 1
             elif next_candle_trend == 'BEARISH':
                 bearish_signals += 1
 
     # Check for Engulfing pattern
-    engulfing_trend = is_engulfing(bars[-2:])
-    if engulfing_trend == 'BULLISH':
-        bullish_signals += 1
-    elif engulfing_trend == 'BEARISH':
-        bearish_signals += 1
+    if len(bars) > 1:
+        engulfing_trend = is_engulfing(bars[-2], bars[-1])
+        if engulfing_trend == 'BULLISH':
+            bullish_signals += 1
+        elif engulfing_trend == 'BEARISH':
+            bearish_signals += 1
 
     # Check for Morning Star and Evening Star
     if len(bars) >= 3:
@@ -193,10 +239,11 @@ def analyze_market_trend(bars):
             bearish_signals += 1
 
     # Check for Piercing Line and Dark Cloud Cover
-    if is_piercing_line(bars[-2:]):
-        bullish_signals += 1
-    if is_dark_cloud_cover(bars[-2:]):
-        bearish_signals += 1
+    if len(bars) > 1:
+        if is_piercing_line(bars[-2:]):
+            bullish_signals += 1
+        if is_dark_cloud_cover(bars[-2:]):
+            bearish_signals += 1
 
     total_signals = bullish_signals + bearish_signals
 
@@ -212,6 +259,7 @@ def analyze_market_trend(bars):
         confidence = (bearish_signals / total_signals) * 100
 
     return {'trend': suggested_trend, 'confidence': confidence}
+
 
 
 def analyze_and_trade(symbol, bars):
