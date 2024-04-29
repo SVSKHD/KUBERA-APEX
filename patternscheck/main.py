@@ -20,12 +20,20 @@ def trade_symbol(symbol):
         observe_price(symbol, pip_diff=15, volume=0.1, stop_loss_pips=10)
         time.sleep(60)  # Sleep to prevent excessive API calls
 
+
 def main():
     if connect_to_mt5(ACCOUNT_NUMBER, PASSWORD, SERVER):
         print("Successfully connected to MetaTrader 5.")
         get_account_balance()
 
-        symbols = ["EURUSD", "GBPUSD"]
+        recommendation = daily_trading_recommendations()
+        print(recommendation)  # Print the recommendation for clarity
+
+        if 'weekend' in recommendation:
+            symbols = ['BTCUSD']
+        else:
+            symbols = ['EURUSD', 'GBPUSD', 'USDJPY']
+
         threads = []
         for symbol in symbols:
             t = threading.Thread(target=trade_symbol, args=(symbol,))
@@ -33,7 +41,8 @@ def main():
             threads.append(t)
 
         for t in threads:
-            t.join()  # Wait for all threads to complete
+            t.join()
+
 
 if __name__ == "__main__":
     main()
