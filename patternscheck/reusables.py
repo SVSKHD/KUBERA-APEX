@@ -3,6 +3,7 @@ import time
 import math
 import pytz
 from datetime import datetime, timedelta
+import asyncio
 
 
 def daily_trading_recommendations():
@@ -69,6 +70,11 @@ def adjust_price(price, symbol_info):
 
 
 # fetch-candels ---------------------------------------------------------------------------------------------------------------------------------Section>
+
+async def fetch_bars_async(symbol, timeframe=mt5.TIMEFRAME_H1, count=100):
+    return await asyncio.to_thread(fetch_bars, symbol, timeframe, count)
+
+
 def fetch_bars(symbol, timeframe=mt5.TIMEFRAME_H1, count=100):
     if not mt5.symbol_select(symbol, True):
         print(f"Failed to select symbol {symbol}.")
@@ -81,31 +87,21 @@ def fetch_bars(symbol, timeframe=mt5.TIMEFRAME_H1, count=100):
         print(f"Failed to fetch recent bar for {symbol}. Error code: {mt5.last_error()}")
         return None
 
-    # The latest bar's time needs to be converted to a datetime object
     utc_to = datetime.fromtimestamp(recent_bars[0]['time'], tz=timezone)
-
-    # Calculate 'from' date based on count
     utc_from = utc_to - timedelta(hours=count)
 
-    # Only localize if datetime objects are naive (lacking timezone info)
+    # Only localize if datetime objects are naive
     if utc_from.tzinfo is None:
         utc_from = timezone.localize(utc_from)
     if utc_to.tzinfo is None:
         utc_to = timezone.localize(utc_to)
 
-    # Check if the symbol is available in MT5
-    if not mt5.symbol_select(symbol, True):
-        print(f"Failed to select symbol {symbol}")
-        return None
-
     # Fetch the bars from MT5
     bars = mt5.copy_rates_range(symbol, timeframe, utc_from, utc_to)
-
     if bars is None or len(bars) == 0:
         print(f"Failed to fetch bars for {symbol}. Error code: {mt5.last_error()}")
         return None
 
-    # Convert the result to a list of dictionaries to be more intuitive
     bars_data = [{
         'time': datetime.fromtimestamp(bar['time'], tz=timezone).strftime('%Y-%m-%d %H:%M:%S'),
         'open': bar['open'],
@@ -116,6 +112,8 @@ def fetch_bars(symbol, timeframe=mt5.TIMEFRAME_H1, count=100):
     } for bar in bars]
 
     return bars_data
+
+
 # Trade Methods ---------------------------------------------------------------------------------------------------------------------------------Section>
 
 
@@ -261,7 +259,6 @@ def analyze_market_trend(bars):
     return {'trend': suggested_trend, 'confidence': confidence}
 
 
-
 def analyze_and_trade(symbol, bars):
     analysis = analyze_market_trend(bars)
     trend = analysis['trend']
@@ -291,7 +288,8 @@ def analyze_and_trade(symbol, bars):
             price_difference = (current_price - initial_price) / pip_scale
 
             # Check if the price has moved 15 pips in the direction of the trend before placing a trade
-            if not order_sent and ((order_type == 'BUY' and price_difference >= 15) or (order_type == 'SELL' and price_difference <= -15)):
+            if not order_sent and ((order_type == 'BUY' and price_difference >= 15) or (
+                    order_type == 'SELL' and price_difference <= -15)):
                 result = order_send(symbol, order_type, volume, current_price)
                 if result and result.retcode == mt5.TRADE_RETCODE_DONE:
                     print(f"Trade placed: {order_type} at {current_price}.")
