@@ -2,12 +2,14 @@ import MetaTrader5 as mt5
 import threading
 import time
 import asyncio
-from reusables import connect_to_mt5, get_account_balance, analyze_and_trade, observe_price, fetch_bars_async, daily_trading_recommendations
+from reusables import connect_to_mt5, get_account_balance, analyze_and_trade, observe_price, fetch_bars_async, \
+    daily_trading_recommendations
 
 # Configuration for MT5 connection
 ACCOUNT_NUMBER = 212792645
 PASSWORD = 'pn^eNL4U'
 SERVER = 'OctaFX-Demo'
+
 
 def trade_symbol(symbol):
     # Create a new event loop for the thread
@@ -27,6 +29,7 @@ def trade_symbol(symbol):
     loop.run_until_complete(trade_loop())
     loop.close()
 
+
 def main():
     if connect_to_mt5(ACCOUNT_NUMBER, PASSWORD, SERVER):
         print("Successfully connected to MetaTrader 5.")
@@ -36,7 +39,7 @@ def main():
         print(recommendation)
 
         # Deciding symbols based on recommendation (example logic)
-        symbols = ['BTCUSD'] if 'weekend' in recommendation else ['EURUSD', 'GBPUSD','USDJPY']
+        symbols = ['BTCUSD'] if 'weekend' in recommendation else ['EURUSD', 'GBPUSD', 'USDJPY']
 
         threads = []
         for symbol in symbols:
@@ -46,6 +49,7 @@ def main():
 
         for t in threads:
             t.join()
+
 
 if __name__ == "__main__":
     main()
