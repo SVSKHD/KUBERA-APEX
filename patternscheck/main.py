@@ -25,7 +25,7 @@ def main():
         print("Successfully connected to MetaTrader 5.")
         get_account_balance()
 
-        symbols = ["EURUSD", "GBPUSD", "USDJPY"]
+        symbols = ["EURUSD", "GBPUSD"]
         threads = []
         for symbol in symbols:
             t = threading.Thread(target=trade_symbol, args=(symbol,))
