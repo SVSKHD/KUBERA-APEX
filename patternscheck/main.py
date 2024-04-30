@@ -1,6 +1,5 @@
 import MetaTrader5 as mt5
 import threading
-import time
 import asyncio
 from reusables import connect_to_mt5, get_account_balance, analyze_and_trade, observe_price, fetch_bars_async, \
     daily_trading_recommendations
@@ -9,7 +8,6 @@ from reusables import connect_to_mt5, get_account_balance, analyze_and_trade, ob
 ACCOUNT_NUMBER = 212792645
 PASSWORD = 'pn^eNL4U'
 SERVER = 'OctaFX-Demo'
-
 
 def trade_symbol(symbol):
     # Create a new event loop for the thread
@@ -24,11 +22,10 @@ def trade_symbol(symbol):
             else:
                 print(f"Failed to fetch bars for {symbol}.")
             observe_price(symbol, pip_diff=15, volume=0.1, stop_loss_pips=10)
-            await asyncio.sleep(60)  # Sleep to prevent excessive API calls
+            await asyncio.sleep(5)  # Sleep for 5 seconds to prevent excessive API calls
 
     loop.run_until_complete(trade_loop())
     loop.close()
-
 
 def main():
     if connect_to_mt5(ACCOUNT_NUMBER, PASSWORD, SERVER):
@@ -49,7 +46,6 @@ def main():
 
         for t in threads:
             t.join()
-
 
 if __name__ == "__main__":
     main()

@@ -76,32 +76,42 @@ async def fetch_bars_async(symbol, timeframe=mt5.TIMEFRAME_H1, count=100):
 
 
 def fetch_bars(symbol, timeframe=mt5.TIMEFRAME_H1, count=100):
+    # Initialize and select the symbol
+    if not mt5.initialize():
+        print("Failed to initialize MT5, error code =", mt5.last_error())
+        return None
+
     if not mt5.symbol_select(symbol, True):
         print(f"Failed to select symbol {symbol}.")
         return None
-    timezone = pytz.utc  # Define timezone to UTC
+
+    # Define timezone to UTC
+    timezone = pytz.utc
 
     # Fetch the latest bar time from MT5
     recent_bars = mt5.copy_rates_from_pos(symbol, timeframe, 0, 1)
     if recent_bars is None or len(recent_bars) == 0:
         print(f"Failed to fetch recent bar for {symbol}. Error code: {mt5.last_error()}")
+        mt5.shutdown()
         return None
 
+    # Calculate the date range for fetching historical data
     utc_to = datetime.fromtimestamp(recent_bars[0]['time'], tz=timezone)
     utc_from = utc_to - timedelta(hours=count)
 
-    # Only localize if datetime objects are naive
-    if utc_from.tzinfo is None:
+    # Ensure that datetime objects are localized to UTC
+    if utc_from.tzinfo is None or utc_to.tzinfo is None:
         utc_from = timezone.localize(utc_from)
-    if utc_to.tzinfo is None:
         utc_to = timezone.localize(utc_to)
 
-    # Fetch the bars from MT5
+    # Fetch the historical bars
     bars = mt5.copy_rates_range(symbol, timeframe, utc_from, utc_to)
     if bars is None or len(bars) == 0:
         print(f"Failed to fetch bars for {symbol}. Error code: {mt5.last_error()}")
+        mt5.shutdown()
         return None
 
+    # Format the fetched data
     bars_data = [{
         'time': datetime.fromtimestamp(bar['time'], tz=timezone).strftime('%Y-%m-%d %H:%M:%S'),
         'open': bar['open'],
@@ -110,6 +120,8 @@ def fetch_bars(symbol, timeframe=mt5.TIMEFRAME_H1, count=100):
         'close': bar['close'],
         'volume': bar['tick_volume']
     } for bar in bars]
+
+    # Clean up the connection
 
     return bars_data
 
