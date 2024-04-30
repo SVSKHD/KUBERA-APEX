@@ -12,7 +12,7 @@ def daily_trading_recommendations():
 
     # Define trading pairs for weekends and weekdays
     weekend_pairs = ['BTCUSD']
-    weekday_pairs = ['EURUSD', 'GBPUSD']
+    weekday_pairs = ['EURUSD', 'GBPUSD', 'USDJPY']
 
     # Check if today is Saturday or Sunday
     if weekday in [5, 6]:  # 5 is Saturday, 6 is Sunday
