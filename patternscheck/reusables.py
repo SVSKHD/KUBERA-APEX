@@ -331,11 +331,13 @@ def analyze_and_trade(symbol, bars):
 
 # buy or close orders
 def order_send(symbol, order_type, volume, price=None, slippage=2, magic=0, comment=""):
+    # Initial checks and preparations
     symbol_info = mt5.symbol_info(symbol)
     if symbol_info is None:
         print("Failed to find symbol, order send failed.")
-        return None
+        return None  # Or consider returning a default object that includes a 'retcode' attribute.
 
+    # Set price and order type based on the symbol and order type
     if order_type == 'BUY':
         order_type_mt5 = mt5.ORDER_TYPE_BUY
         price = mt5.symbol_info_tick(symbol).ask if price is None else price
@@ -344,8 +346,9 @@ def order_send(symbol, order_type, volume, price=None, slippage=2, magic=0, comm
         price = mt5.symbol_info_tick(symbol).bid if price is None else price
     else:
         print("Invalid order type.")
-        return None
+        return None  # Or return a default object with a 'retcode'.
 
+    # Create and send order
     request = {
         "action": mt5.TRADE_ACTION_DEAL,
         "symbol": symbol,
@@ -359,11 +362,11 @@ def order_send(symbol, order_type, volume, price=None, slippage=2, magic=0, comm
     }
 
     result = mt5.order_send(request)
-    if result.retcode != mt5.TRADE_RETCODE_DONE:
-        print(f"Order send failed, retcode={result.retcode}")
-    else:
-        print(f"Order sent successfully, ticket={result.order}")
+    if not result or result.retcode != mt5.TRADE_RETCODE_DONE:
+        print(f"Order send failed, retcode={getattr(result, 'retcode', 'None')}")
+        return result  # Ensure this is not None without a retcode
 
+    print(f"Order sent successfully, ticket={result.order}")
     return result
 
 
