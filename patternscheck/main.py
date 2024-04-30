@@ -35,7 +35,7 @@ def trade_symbol(symbol):
                 analyze_and_trade(symbol, bars)
             else:
                 print(f"Failed to fetch bars for {symbol}.")
-            observe_price(symbol, pip_diff=15, volume=1, stop_loss_pips=10)
+            observe_price(symbol, pip_diff=15, volume=0.1, stop_loss_pips=10)
             await asyncio.sleep(1)  # Sleep for 1 second to prevent excessive API calls
 
     loop.run_until_complete(trade_loop())

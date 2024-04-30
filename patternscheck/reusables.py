@@ -357,7 +357,7 @@ def order_send(symbol, order_type, volume, price=None, slippage=2, magic=0, comm
         "price": price,
         "slippage": slippage,
         "magic": magic,
-        "comment": comment,
+        "comment": "KUBERA_APEX",
         "type_filling": mt5.ORDER_FILLING_FOK,
     }
 
