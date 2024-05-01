@@ -4,6 +4,7 @@ import math
 import pytz
 from datetime import datetime, timedelta
 import asyncio
+import numpy as np
 
 
 def daily_trading_recommendations():
@@ -75,10 +76,6 @@ async def fetch_bars_async(symbol, timeframe=mt5.TIMEFRAME_H1, count=100):
     return await asyncio.to_thread(fetch_bars, symbol, timeframe, count)
 
 
-import MetaTrader5 as mt5
-import pytz
-from datetime import datetime, timedelta
-
 def fetch_bars(symbol, timeframe=mt5.TIMEFRAME_H1, count=100):
     # Initialize and select the symbol
     if not mt5.initialize():
@@ -134,6 +131,52 @@ def fetch_bars(symbol, timeframe=mt5.TIMEFRAME_H1, count=100):
     } for bar in bars]
 
     # Clean up the connection
+    mt5.shutdown()
+    return bars_data
+
+
+def fetch_and_aggregate_ticks(symbol, count=100, timeframe=mt5.TIMEFRAME_H1):
+    if not mt5.initialize():
+        print("Failed to initialize MT5, error code =", mt5.last_error())
+        return None
+
+    if not mt5.symbol_select(symbol, True):
+        print(f"Failed to select symbol {symbol}. Error code: {mt5.last_error()}")
+        mt5.shutdown()
+        return None
+
+    # Define the timezone as UTC
+    timezone = pytz.utc
+
+    # Define the range for tick data
+    utc_to = datetime.now(timezone)
+    utc_from = utc_to - timedelta(hours=count + 5)  # Fetch more to ensure completeness
+
+    # Fetch the tick data
+    ticks = mt5.copy_ticks_range(symbol, utc_from, utc_to, mt5.COPY_TICKS_ALL)
+    if ticks is None or len(ticks) == 0:
+        print(f"Failed to fetch ticks for {symbol}. Error code: {mt5.last_error()}")
+        mt5.shutdown()
+        return None
+
+    # Convert to DataFrame
+    ticks_df = pd.DataFrame(ticks)
+    ticks_df['time'] = pd.to_datetime(ticks_df['time'], unit='s', utc=True).dt.tz_convert(timezone).dt.floor('H')
+
+    # Group by the nearest hour for aggregation
+    grouped_ticks = ticks_df.groupby('time')
+    bars_data = [{
+        'time': name.strftime('%Y-%m-%d %H:%M:%S'),
+        'open': group['ask'].iloc[0],
+        'high': group['ask'].max(),
+        'low': group['ask'].min(),
+        'close': group['ask'].iloc[-1],
+        'volume': group['volume'].sum()
+    } for name, group in grouped_ticks]
+
+    # Select the last 'count' bars
+    bars_data = bars_data[-count:]
+
     mt5.shutdown()
     return bars_data
 

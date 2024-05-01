@@ -2,7 +2,7 @@ import MetaTrader5 as mt5
 import threading
 import asyncio
 from datetime import datetime
-from reusables import connect_to_mt5, get_account_balance, analyze_and_trade, observe_price, fetch_bars_async
+from reusables import connect_to_mt5, get_account_balance, analyze_and_trade, observe_price, fetch_and_aggregate_ticks
 
 # Configuration for MT5 connection
 ACCOUNT_NUMBER = 212792645
@@ -12,45 +12,37 @@ SERVER = 'OctaFX-Demo'
 
 def daily_trading_recommendations():
     today = datetime.now()
-    weekday = today.weekday()  # Monday is 0 and Sunday is 6
+    weekday = today.weekday()
 
-    # Define trading pairs for weekends and weekdays
+
     weekend_pairs = ['BTCUSD']
-    # Add more currency pairs to weekday trading
     weekday_pairs = ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'NZDUSD', 'USDCAD', 'EURJPY', 'GBPJPY']
 
-    # Check if today is Saturday or Sunday
-    if weekday in [5, 6]:  # 5 is Saturday, 6 is Sunday
+    if weekday in [5, 6]:  # Saturday or Sunday
         return ['BTCUSD']
     else:
         return weekday_pairs  # Updated to return the expanded list
 
 
-def trade_symbol(symbol):
-    # pip_diff = None
-    # stop_loss_diff = None
-    # Create a new event loop for the thread
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+async def trade_symbol(symbol):
+    loop = asyncio.get_running_loop()
 
-    async def trade_loop():
-        if symbol == 'BTCUSD':
-            pip_diff = 2000
-            stop_loss_pips = 1000
+    if symbol == 'BTCUSD':
+        pip_diff = 2000
+        stop_loss_pips = 1000
+    else:
+        pip_diff = 15
+        stop_loss_pips = 10
+
+    while True:
+        bars = await loop.run_in_executor(None, fetch_and_aggregate_ticks, symbol, 100, mt5.TIMEFRAME_H1)
+        if bars:
+            analyze_and_trade(symbol, bars)
         else:
-            pip_diff = 15
-            stop_loss_pips = 10
-        while True:
-            bars = await fetch_bars_async(symbol, mt5.TIMEFRAME_H1, 100)
-            if bars:
-                analyze_and_trade(symbol, bars)
-            else:
-                print(f"Failed to fetch bars for {symbol}.")
-            observe_price(symbol, pip_diff=pip_diff, volume=0.1, stop_loss_pips=stop_loss_pips)
-            await asyncio.sleep(1)  # Sleep for 1 second to prevent excessive API calls
+            print(f"Failed to fetch bars for {symbol}.")
 
-    loop.run_until_complete(trade_loop())
-    loop.close()
+        observe_price(symbol, pip_diff=pip_diff, volume=0.1, stop_loss_pips=stop_loss_pips)
+        await asyncio.sleep(1)
 
 
 def main():
@@ -63,7 +55,7 @@ def main():
 
         threads = []
         for symbol in symbols:
-            t = threading.Thread(target=trade_symbol, args=(symbol,))
+            t = threading.Thread(target=lambda: asyncio.run(trade_symbol(symbol)))
             t.start()
             threads.append(t)
 
