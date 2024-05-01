@@ -75,15 +75,27 @@ async def fetch_bars_async(symbol, timeframe=mt5.TIMEFRAME_H1, count=100):
     return await asyncio.to_thread(fetch_bars, symbol, timeframe, count)
 
 
+import MetaTrader5 as mt5
+import pytz
+from datetime import datetime, timedelta
+
 def fetch_bars(symbol, timeframe=mt5.TIMEFRAME_H1, count=100):
     # Initialize and select the symbol
     if not mt5.initialize():
         print("Failed to initialize MT5, error code =", mt5.last_error())
         return None
 
-    if not mt5.symbol_select(symbol, True):
-        print(f"Failed to select symbol {symbol}.")
+    # Check if the symbol is available in Market Watch
+    symbol_info = mt5.symbol_info(symbol)
+    if symbol_info is None:
+        print(f"Symbol {symbol} not found.")
+        mt5.shutdown()
         return None
+    if not symbol_info.visible:
+        if not mt5.symbol_select(symbol, True):
+            print(f"Failed to select symbol {symbol}.")
+            mt5.shutdown()
+            return None
 
     # Define timezone to UTC
     timezone = pytz.utc
@@ -122,8 +134,9 @@ def fetch_bars(symbol, timeframe=mt5.TIMEFRAME_H1, count=100):
     } for bar in bars]
 
     # Clean up the connection
-
+    mt5.shutdown()
     return bars_data
+
 
 
 # Trade Methods ---------------------------------------------------------------------------------------------------------------------------------Section>
