@@ -5,6 +5,7 @@ import pytz
 from datetime import datetime, timedelta
 import asyncio
 import numpy as np
+import pandas as pd
 
 
 def daily_trading_recommendations():
@@ -76,73 +77,43 @@ async def fetch_bars_async(symbol, timeframe=mt5.TIMEFRAME_H1, count=100):
     return await asyncio.to_thread(fetch_bars, symbol, timeframe, count)
 
 
-def fetch_bars(symbol, timeframe=mt5.TIMEFRAME_H1, count=100):
-    # Initialize and select the symbol
-    if not mt5.initialize():
-        print("Failed to initialize MT5, error code =", mt5.last_error())
-        return None
-
-    # Check if the symbol is available in Market Watch
-    symbol_info = mt5.symbol_info(symbol)
-    if symbol_info is None:
-        print(f"Symbol {symbol} not found.")
-        mt5.shutdown()
-        return None
-    if not symbol_info.visible:
+def ensure_symbol(symbol):
+    if not mt5.symbol_select(symbol, True):
+        print(f"Attempting to select symbol {symbol} again...")
         if not mt5.symbol_select(symbol, True):
-            print(f"Failed to select symbol {symbol}.")
-            mt5.shutdown()
-            return None
+            print(f"Failed to select symbol {symbol} after retry. Error code: {mt5.last_error()}")
+            return False
+    return True
 
-    # Define timezone to UTC
-    timezone = pytz.utc
-
-    # Fetch the latest bar time from MT5
-    recent_bars = mt5.copy_rates_from_pos(symbol, timeframe, 0, 1)
-    if recent_bars is None or len(recent_bars) == 0:
-        print(f"Failed to fetch recent bar for {symbol}. Error code: {mt5.last_error()}")
-        mt5.shutdown()
+# Fetch bars using a persistent connection
+def fetch_bars(symbol, timeframe=mt5.TIMEFRAME_H1, count=100):
+    if not ensure_symbol(symbol):
         return None
 
-    # Calculate the date range for fetching historical data
+    timezone = pytz.utc
+    recent_bars = mt5.copy_rates_from_pos(symbol, timeframe, 0, 1)
+    if not recent_bars:
+        print(f"Failed to fetch recent bar for {symbol}. Error code: {mt5.last_error()}")
+        return None
+
     utc_to = datetime.fromtimestamp(recent_bars[0]['time'], tz=timezone)
     utc_from = utc_to - timedelta(hours=count)
 
-    # Ensure that datetime objects are localized to UTC
-    if utc_from.tzinfo is None or utc_to.tzinfo is None:
-        utc_from = timezone.localize(utc_from)
-        utc_to = timezone.localize(utc_to)
-
-    # Fetch the historical bars
     bars = mt5.copy_rates_range(symbol, timeframe, utc_from, utc_to)
-    if bars is None or len(bars) == 0:
+    if not bars:
         print(f"Failed to fetch bars for {symbol}. Error code: {mt5.last_error()}")
-        mt5.shutdown()
         return None
 
-    # Format the fetched data
-    bars_data = [{
-        'time': datetime.fromtimestamp(bar['time'], tz=timezone).strftime('%Y-%m-%d %H:%M:%S'),
-        'open': bar['open'],
-        'high': bar['high'],
-        'low': bar['low'],
-        'close': bar['close'],
-        'volume': bar['tick_volume']
-    } for bar in bars]
+    bars_data = [{ 'time': datetime.fromtimestamp(bar['time'], tz=timezone).strftime('%Y-%m-%d %H:%M:%S'),
+                   'open': bar['open'], 'high': bar['high'], 'low': bar['low'], 'close': bar['close'],
+                   'volume': bar['tick_volume'] } for bar in bars]
 
-    # Clean up the connection
-    mt5.shutdown()
     return bars_data
 
-
 def fetch_and_aggregate_ticks(symbol, count=100, timeframe=mt5.TIMEFRAME_H1):
-    if not mt5.initialize():
-        print("Failed to initialize MT5, error code =", mt5.last_error())
-        return None
-
+    # Check if the symbol is available and visible
     if not mt5.symbol_select(symbol, True):
         print(f"Failed to select symbol {symbol}. Error code: {mt5.last_error()}")
-        mt5.shutdown()
         return None
 
     # Define the timezone as UTC
@@ -156,12 +127,11 @@ def fetch_and_aggregate_ticks(symbol, count=100, timeframe=mt5.TIMEFRAME_H1):
     ticks = mt5.copy_ticks_range(symbol, utc_from, utc_to, mt5.COPY_TICKS_ALL)
     if ticks is None or len(ticks) == 0:
         print(f"Failed to fetch ticks for {symbol}. Error code: {mt5.last_error()}")
-        mt5.shutdown()
         return None
 
     # Convert to DataFrame
     ticks_df = pd.DataFrame(ticks)
-    ticks_df['time'] = pd.to_datetime(ticks_df['time'], unit='s', utc=True).dt.tz_convert(timezone).dt.floor('H')
+    ticks_df['time'] = pd.to_datetime(ticks_df['time'], unit='s', utc=True).dt.tz_convert(timezone).dt.floor('h')
 
     # Group by the nearest hour for aggregation
     grouped_ticks = ticks_df.groupby('time')
@@ -175,13 +145,7 @@ def fetch_and_aggregate_ticks(symbol, count=100, timeframe=mt5.TIMEFRAME_H1):
     } for name, group in grouped_ticks]
 
     # Select the last 'count' bars
-    bars_data = bars_data[-count:]
-
-    mt5.shutdown()
-    return bars_data
-
-
-
+    return bars_data[-count:]
 # Trade Methods ---------------------------------------------------------------------------------------------------------------------------------Section>
 
 
@@ -489,7 +453,6 @@ def observe_price(symbol, pip_diff=15, volume=0.1, stop_loss_pips=10):
         mt5.shutdown()
         return
     last_traded_price = initial_tick.ask  # Start with the current ask price
-
     print(f"Starting observation for {symbol} at price: {last_traded_price}")
 
     order_type = None
@@ -498,30 +461,31 @@ def observe_price(symbol, pip_diff=15, volume=0.1, stop_loss_pips=10):
         while True:
             current_tick = mt5.symbol_info_tick(symbol)
             if current_tick is None:
-                continue  # Skip this iteration if tick data is not available
+                time.sleep(1)  # wait for a second before the next check
+                continue
 
             current_price = current_tick.ask
-            pip_scale = 0.0001 if not symbol.endswith("JPY") else 0.01
+            pip_scale = 0.0001 if 'JPY' not in symbol else 0.01
             difference = (current_price - last_traded_price) / pip_scale
 
-            # Check if the price has moved 15 pips away from the last traded price
+            # Check if the price has moved significantly from the last traded price
             if abs(difference) >= pip_diff:
                 direction = "increased" if difference > 0 else "decreased"
-                print(
-                    f"{pip_diff} pip {direction} reached for {symbol} at price: {current_price} ({difference:+.2f} pips)")
+                print(f"{symbol}: {difference:+.2f} pips {direction} from initial price {last_traded_price} to {current_price}")
+                # Optionally execute trade logic
                 close_all_trades()
                 order_type = 'BUY' if direction == "increased" else 'SELL'
-                order_send(symbol, order_type, volume)  # Execute the trade
-                last_traded_price = current_price  # Update the last traded price to current
+                order_send(symbol, order_type, volume)
+                last_traded_price = current_price  # Update last traded price
                 print(f"New base price for next trade: {last_traded_price}")
 
             # Monitoring for stop loss condition
-            loss_difference = (current_price - last_traded_price) / pip_scale
-            if (order_type == 'BUY' and loss_difference <= -stop_loss_pips) or (
-                    order_type == 'SELL' and loss_difference >= stop_loss_pips):
-                print(f"Market moved {stop_loss_pips} pips against the position; closing all trades.")
-                close_all_trades()  # Close all trades if the market moves 10 pips against the trade
-                break  # Optional: stop the function after closing trades to reassess strategy
+            if order_type:
+                loss_difference = (current_price - last_traded_price) / pip_scale
+                if (order_type == 'BUY' and loss_difference <= -stop_loss_pips) or (order_type == 'SELL' and loss_difference >= stop_loss_pips):
+                    print(f"Market moved {stop_loss_pips} pips against the position; closing all trades.")
+                    close_all_trades()
+                    break  # Optional: stop the function after closing trades to reassess strategy
 
             time.sleep(1)  # Small delay to prevent excessive CPU usage
     finally:
