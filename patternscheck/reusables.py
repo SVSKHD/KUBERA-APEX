@@ -439,19 +439,18 @@ def get_live_price(symbol):
 # Observe price and check for 15 pip difference
 
 
-def observe_price(symbol, pip_diff=15, volume=0.1, stop_loss_pips=10):
-    # Ensure the symbol is available in MT5
+async def observe_price(symbol, pip_diff=15, volume=0.1, stop_loss_pips=10):
     if not mt5.symbol_select(symbol, True):
         print(f"Failed to select {symbol}, symbol not found on MT5.")
         mt5.shutdown()
         return
 
-    # Get the initial tick data for real-time analysis
     initial_tick = mt5.symbol_info_tick(symbol)
     if initial_tick is None:
         print("Failed to get tick data for", symbol)
         mt5.shutdown()
         return
+
     last_traded_price = initial_tick.ask  # Start with the current ask price
     print(f"Starting observation for {symbol} at price: {last_traded_price}")
 
@@ -459,10 +458,10 @@ def observe_price(symbol, pip_diff=15, volume=0.1, stop_loss_pips=10):
 
     try:
         while True:
+            await asyncio.sleep(1)  # Non-blocking wait
             current_tick = mt5.symbol_info_tick(symbol)
             if current_tick is None:
-                time.sleep(1)  # wait for a second before the next check
-                continue
+                continue  # Skip this iteration if tick data is not available
 
             current_price = current_tick.ask
             pip_scale = 0.0001 if 'JPY' not in symbol else 0.01
@@ -472,10 +471,9 @@ def observe_price(symbol, pip_diff=15, volume=0.1, stop_loss_pips=10):
             if abs(difference) >= pip_diff:
                 direction = "increased" if difference > 0 else "decreased"
                 print(f"{symbol}: {difference:+.2f} pips {direction} from initial price {last_traded_price} to {current_price}")
-                # Optionally execute trade logic
-                close_all_trades()
+                await close_all_trades()
                 order_type = 'BUY' if direction == "increased" else 'SELL'
-                order_send(symbol, order_type, volume)
+                await order_send(symbol, order_type, volume)
                 last_traded_price = current_price  # Update last traded price
                 print(f"New base price for next trade: {last_traded_price}")
 
@@ -484,14 +482,11 @@ def observe_price(symbol, pip_diff=15, volume=0.1, stop_loss_pips=10):
                 loss_difference = (current_price - last_traded_price) / pip_scale
                 if (order_type == 'BUY' and loss_difference <= -stop_loss_pips) or (order_type == 'SELL' and loss_difference >= stop_loss_pips):
                     print(f"Market moved {stop_loss_pips} pips against the position; closing all trades.")
-                    close_all_trades()
+                    await close_all_trades()
                     break  # Optional: stop the function after closing trades to reassess strategy
 
-            time.sleep(1)  # Small delay to prevent excessive CPU usage
     finally:
         mt5.shutdown()
-
-
 # Manage trades based on signals
 def manage_trades(symbol, signal, max_trades=4, minimal_profit=0.0001):
     try:
