@@ -14,7 +14,6 @@ def daily_trading_recommendations():
     today = datetime.now()
     weekday = today.weekday()
 
-
     weekend_pairs = ['BTCUSD']
     weekday_pairs = ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'NZDUSD', 'USDCAD', 'EURJPY', 'GBPJPY']
 
