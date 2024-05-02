@@ -12,7 +12,7 @@ def daily_trading_recommendations():
     today = datetime.now()
     weekday = today.weekday()
     weekend_pairs = ['BTCUSD']
-    weekday_pairs = ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'NZDUSD', 'USDCAD', 'EURJPY', 'GBPJPY']
+    weekday_pairs = ['EURUSD']
     return ['BTCUSD'] if weekday in [5, 6] else weekday_pairs
 
 
@@ -25,7 +25,7 @@ async def trade_symbol(symbol):
             print(f"Fetching bars for {symbol}")
             bars = await loop.run_in_executor(None, fetch_and_aggregate_ticks, symbol, 100, mt5.TIMEFRAME_H1)
             if bars:
-                print(f"Bars fetched for {symbol}, analyzing trade.")
+                print(f"Bars fetched for {symbol}, {bars}, analyzing trade.")
                 analyze_and_trade(symbol, bars)
             else:
                 print(f"Failed to fetch bars for {symbol}.")
