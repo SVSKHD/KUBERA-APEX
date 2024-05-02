@@ -73,6 +73,65 @@ def adjust_price(price, symbol_info):
 
 # fetch-candels ---------------------------------------------------------------------------------------------------------------------------------Section>
 
+def fetch_bars_today(symbol, timeframe=mt5.TIMEFRAME_H1):
+    if not mt5.initialize():
+        print("initialize() failed, error code =", mt5.last_error())
+        mt5.shutdown()
+        return None
+
+    if not mt5.symbol_select(symbol, True):
+        print(f"Failed to select symbol {symbol}. Error code: {mt5.last_error()}")
+        mt5.shutdown()
+        return None
+
+    # Set the timezone to UTC
+    timezone = pytz.utc
+
+    # Define the time period for today (from midnight to current time)
+    utc_now = datetime.now(timezone)
+    today_midnight = utc_now.replace(hour=0, minute=0, second=0, microsecond=0)
+    bars = mt5.copy_rates_range(symbol, timeframe, today_midnight, utc_now)
+
+    if bars is None or len(bars) == 0:
+        print(f"Failed to fetch bars for {symbol}. Error code: {mt5.last_error()}")
+        mt5.shutdown()
+        return None
+
+    # Convert to DataFrame
+    bars_df = pd.DataFrame(bars)
+    bars_df['time'] = pd.to_datetime(bars_df['time'], unit='s', utc=True).dt.tz_convert(timezone)
+
+    # Store the DataFrame in a CSV file
+    file_name = f"{symbol}_today_bars.csv"
+    bars_df.to_csv(file_name, index=False)
+    print(f"Bars for {symbol} saved to {file_name}")
+
+    mt5.shutdown()
+    return bars_df
+
+
+def fetch_ticks(symbol, tick_count=100000):
+    utc_now = datetime.now()
+    ticks = mt5.copy_ticks_from(symbol, utc_now, tick_count, mt5.COPY_TICKS_ALL)
+    ticks_df = pd.DataFrame(ticks)
+    ticks_df['time'] = pd.to_datetime(ticks_df['time'], unit='s')
+    ticks_df.to_csv(f"{symbol}_ticks.csv", index=False)
+    print(f"Ticks for {symbol} saved to {symbol}_ticks.csv")
+
+
+if not mt5.initialize():
+    print("initialize() failed, error code =", mt5.last_error())
+    quit()
+
+while True:
+    recommended_pairs = daily_trading_recommendations()
+    for symbol in recommended_pairs:
+        fetch_ticks(symbol)
+
+    time.sleep(3600)
+
+
+
 async def fetch_bars_async(symbol, timeframe=mt5.TIMEFRAME_H1, count=100):
     return await asyncio.to_thread(fetch_bars, symbol, timeframe, count)
 
@@ -84,6 +143,7 @@ def ensure_symbol(symbol):
             print(f"Failed to select symbol {symbol} after retry. Error code: {mt5.last_error()}")
             return False
     return True
+
 
 # Fetch bars using a persistent connection
 def fetch_bars(symbol, timeframe=mt5.TIMEFRAME_H1, count=100):
@@ -104,11 +164,12 @@ def fetch_bars(symbol, timeframe=mt5.TIMEFRAME_H1, count=100):
         print(f"Failed to fetch bars for {symbol}. Error code: {mt5.last_error()}")
         return None
 
-    bars_data = [{ 'time': datetime.fromtimestamp(bar['time'], tz=timezone).strftime('%Y-%m-%d %H:%M:%S'),
-                   'open': bar['open'], 'high': bar['high'], 'low': bar['low'], 'close': bar['close'],
-                   'volume': bar['tick_volume'] } for bar in bars]
+    bars_data = [{'time': datetime.fromtimestamp(bar['time'], tz=timezone).strftime('%Y-%m-%d %H:%M:%S'),
+                  'open': bar['open'], 'high': bar['high'], 'low': bar['low'], 'close': bar['close'],
+                  'volume': bar['tick_volume']} for bar in bars]
 
     return bars_data
+
 
 def fetch_and_aggregate_ticks(symbol, count=100, timeframe=mt5.TIMEFRAME_H1):
     # Check if the symbol is available and visible
@@ -146,6 +207,8 @@ def fetch_and_aggregate_ticks(symbol, count=100, timeframe=mt5.TIMEFRAME_H1):
 
     # Select the last 'count' bars
     return bars_data[-count:]
+
+
 # Trade Methods ---------------------------------------------------------------------------------------------------------------------------------Section>
 
 
@@ -185,25 +248,10 @@ def is_evening_star(bars):
 
 
 def is_engulfing(candle1, candle2):
-    """
-    Determine if the relationship between two consecutive candles forms an engulfing pattern.
-
-    Args:
-        candle1 (dict): The first candle with 'open', 'close', 'high', and 'low'.
-        candle2 (dict): The second candle with 'open', 'close', 'high', and 'low'.
-
-    Returns:
-        str: 'BULLISH' if a bullish engulfing pattern is found, 'BEARISH' if a bearish engulfing pattern is found,
-             'NONE' if no engulfing pattern is detected.
-    """
-    # Check for bullish engulfing:
-    # Candle1 is bearish and Candle2 is bullish and Candle2 engulfs Candle1
     if candle1['open'] > candle1['close'] and candle2['open'] < candle2['close']:
         if candle2['open'] <= candle1['close'] and candle2['close'] >= candle1['open']:
             return 'BULLISH'
 
-    # Check for bearish engulfing:
-    # Candle1 is bullish and Candle2 is bearish and Candle2 engulfs Candle1
     elif candle1['open'] < candle1['close'] and candle2['open'] > candle2['close']:
         if candle2['open'] >= candle1['open'] and candle2['close'] <= candle1['close']:
             return 'BEARISH'
@@ -243,9 +291,7 @@ def analyze_market_trend(bars):
     bullish_signals = 0
     bearish_signals = 0
 
-    # Check for Doji
     if len(bars) > 0 and is_doji(bars[-1]):
-        # If Doji is found, check the next candle for confirmation if it exists
         if len(bars) > 1:
             next_candle_trend = is_engulfing(bars[-2], bars[-1])
             if next_candle_trend == 'BULLISH':
@@ -253,7 +299,6 @@ def analyze_market_trend(bars):
             elif next_candle_trend == 'BEARISH':
                 bearish_signals += 1
 
-    # Check for Engulfing pattern
     if len(bars) > 1:
         engulfing_trend = is_engulfing(bars[-2], bars[-1])
         if engulfing_trend == 'BULLISH':
@@ -268,7 +313,6 @@ def analyze_market_trend(bars):
         if is_evening_star(bars[-3:]):
             bearish_signals += 1
 
-    # Check for Piercing Line and Dark Cloud Cover
     if len(bars) > 1:
         if is_piercing_line(bars[-2:]):
             bullish_signals += 1
@@ -277,7 +321,6 @@ def analyze_market_trend(bars):
 
     total_signals = bullish_signals + bearish_signals
 
-    # Determine the suggested trend and confidence level
     if total_signals == 0:
         suggested_trend = 'UNCERTAIN'
         confidence = 0
@@ -306,7 +349,6 @@ def analyze_and_trade(symbol, bars):
         print(f"Failed to select {symbol}, symbol not found on MT5.")
         return
 
-    # Get current price for the symbol
     current_price = mt5.symbol_info_tick(symbol).ask if trend == 'BULLISH' else mt5.symbol_info_tick(symbol).bid
     initial_price = current_price
     volume = 0.1  # Example volume
@@ -351,13 +393,11 @@ def analyze_and_trade(symbol, bars):
 
 # buy or close orders
 def order_send(symbol, order_type, volume, price=None, slippage=2, magic=0, comment=""):
-    # Initial checks and preparations
     symbol_info = mt5.symbol_info(symbol)
     if symbol_info is None:
         print("Failed to find symbol, order send failed.")
-        return None  # Or consider returning a default object that includes a 'retcode' attribute.
+        return None
 
-    # Set price and order type based on the symbol and order type
     if order_type == 'BUY':
         order_type_mt5 = mt5.ORDER_TYPE_BUY
         price = mt5.symbol_info_tick(symbol).ask if price is None else price
@@ -366,9 +406,8 @@ def order_send(symbol, order_type, volume, price=None, slippage=2, magic=0, comm
         price = mt5.symbol_info_tick(symbol).bid if price is None else price
     else:
         print("Invalid order type.")
-        return None  # Or return a default object with a 'retcode'.
+        return None
 
-    # Create and send order
     request = {
         "action": mt5.TRADE_ACTION_DEAL,
         "symbol": symbol,
@@ -384,7 +423,7 @@ def order_send(symbol, order_type, volume, price=None, slippage=2, magic=0, comm
     result = mt5.order_send(request)
     if not result or result.retcode != mt5.TRADE_RETCODE_DONE:
         print(f"Order send failed, retcode={getattr(result, 'retcode', 'None')}")
-        return result  # Ensure this is not None without a retcode
+        return result
 
     print(f"Order sent successfully, ticket={result.order}")
     return result
@@ -433,10 +472,10 @@ def get_live_price(symbol):
 
     # Get tick data
     tick = mt5.symbol_info_tick(symbol)
-    return tick.ask  # You can change to tick.bid based on your requirement
+    return tick.ask
 
 
-# Observe price and check for 15 pip difference
+
 
 
 async def observe_price(symbol, pip_diff=15, volume=0.1, stop_loss_pips=10):
@@ -470,7 +509,8 @@ async def observe_price(symbol, pip_diff=15, volume=0.1, stop_loss_pips=10):
             # Check if the price has moved significantly from the last traded price
             if abs(difference) >= pip_diff:
                 direction = "increased" if difference > 0 else "decreased"
-                print(f"{symbol}: {difference:+.2f} pips {direction} from initial price {last_traded_price} to {current_price}")
+                print(
+                    f"{symbol}: {difference:+.2f} pips {direction} from initial price {last_traded_price} to {current_price}")
                 await close_all_trades()
                 order_type = 'BUY' if direction == "increased" else 'SELL'
                 await order_send(symbol, order_type, volume)
@@ -480,13 +520,16 @@ async def observe_price(symbol, pip_diff=15, volume=0.1, stop_loss_pips=10):
             # Monitoring for stop loss condition
             if order_type:
                 loss_difference = (current_price - last_traded_price) / pip_scale
-                if (order_type == 'BUY' and loss_difference <= -stop_loss_pips) or (order_type == 'SELL' and loss_difference >= stop_loss_pips):
+                if (order_type == 'BUY' and loss_difference <= -stop_loss_pips) or (
+                        order_type == 'SELL' and loss_difference >= stop_loss_pips):
                     print(f"Market moved {stop_loss_pips} pips against the position; closing all trades.")
                     await close_all_trades()
                     break  # Optional: stop the function after closing trades to reassess strategy
 
     finally:
         mt5.shutdown()
+
+
 # Manage trades based on signals
 def manage_trades(symbol, signal, max_trades=4, minimal_profit=0.0001):
     try:
