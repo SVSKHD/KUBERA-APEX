@@ -78,13 +78,20 @@ def check_positions_and_close(balance):
         return
 
     total_profit = sum(pos.profit for pos in positions)
+    profit_or_loss_percentage = (total_profit / balance) * 100  # This works for both profit and loss
+
     profit_threshold = 0.02 * balance
     loss_threshold = -0.01 * balance
 
-    if total_profit >= profit_threshold or total_profit <= loss_threshold:
-        print(f"reusables.py: Closing all positions due to threshold breach. Total Profit/Loss: {total_profit}")
+    # Check if the total profit/loss exceeds the thresholds
+    if total_profit >= profit_threshold:
+        print(f"reusables.py: Closing all positions due to profit threshold breach. Total Profit: {total_profit} ({profit_or_loss_percentage:.2f}% of balance)")
         close_all_trades()
-
+    elif total_profit <= loss_threshold:
+        print(f"reusables.py: Closing all positions due to loss threshold breach. Total Loss: {total_profit} ({profit_or_loss_percentage:.2f}% of balance)")
+        close_all_trades()
+    else:
+        print(f"We are monitoring the trades. Current Total Profit/Loss: {total_profit} ({profit_or_loss_percentage:.2f}% of balance)")
 
 def mainExecutor(account_number, password, server):
     if connect_to_mt5(account_number, password, server):
