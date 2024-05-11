@@ -18,7 +18,7 @@ def connect_to_mt5(account_number, password, server):
         mt5.shutdown()
         return False
 
-    print("reusables.py : Connected to MT5 account #{}".format(account_number))
+    print("S.py : Connected to MT5 account #{}".format(account_number))
     return True
 
 
