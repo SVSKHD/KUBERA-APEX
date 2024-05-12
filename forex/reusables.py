@@ -50,6 +50,7 @@ def print_currency_pairs():
         pairs = "EURUSD, GBPUSD, USDJPY"
 
     print(f"Today is {day_name}, the {day_number}th (Day {weekday_config} of the week). Trading pairs: {pairs}")
+    return pairs
 
 
 def get_open_orders(open_params=None):
