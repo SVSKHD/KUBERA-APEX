@@ -132,8 +132,8 @@ def mainExecutor(account_number, password, server):
             pairs = print_currency_pairs()  # Retrieve suggested pairs based on the day
             check_positions_and_close(balance)
             if no_trade:
-                print(f"Opportunity to trade is open with suggested pairs: {', '.join(pairs)}")
+                print(f"Opportunity to trade is open with suggested pairs: {pairs}")
             else:
-                print(f"Trades are open, monitoring market with pairs: {', '.join(pairs)}")
+                print(f"Trades are open, monitoring market with pairs: {pairs}")
     else:
         print("Connection failed or balance not retrieved; unable to suggest pairs.")
