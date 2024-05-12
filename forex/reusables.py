@@ -1,10 +1,13 @@
 # reusables.py
 import MetaTrader5 as mt5
 import pandas as pd
+import datetime
 
 balance = None
-no_trade=False
+no_trade = False
 
+
+# connecting to forex account
 def connect_to_mt5(account_number, password, server):
     if not mt5.initialize():
         print("reusables.py : initialize() failed, error code =", mt5.last_error())
@@ -18,6 +21,7 @@ def connect_to_mt5(account_number, password, server):
     return True
 
 
+# get balance
 def get_account_balance():
     account_info = mt5.account_info()
     if account_info is None:
@@ -25,6 +29,27 @@ def get_account_balance():
     else:
         print("reusables.py : Account Balance: ", account_info.balance)
         return account_info.balance
+
+
+def get_today():
+    today = datetime.datetime.now()
+    day_name = today.strftime("%A")
+    day_number = int(today.strftime("%d"))
+    weekday_number = today.isoweekday()
+
+    return day_name, day_number, weekday_number
+
+
+def print_currency_pairs():
+    day_name, day_number, weekday_config = get_today()
+
+    # Check if today is Saturday or Sunday
+    if weekday_config in [6, 7]:  # Adjusted to Saturday (6) or Sunday (7)
+        pairs = "BTCUSD, ETHUSD"
+    else:
+        pairs = "EURUSD, GBPUSD, USDJPY"
+
+    print(f"Today is {day_name}, the {day_number}th (Day {weekday_config} of the week). Trading pairs: {pairs}")
 
 
 def get_open_orders(open_params=None):
@@ -85,21 +110,29 @@ def check_positions_and_close(balance):
 
     # Check if the total profit/loss exceeds the thresholds
     if total_profit >= profit_threshold:
-        print(f"reusables.py: Closing all positions due to profit threshold breach. Total Profit: {total_profit} ({profit_or_loss_percentage:.2f}% of balance)")
+        print(
+            f"reusables.py: Closing all positions due to profit threshold breach. Total Profit: {total_profit} ({profit_or_loss_percentage:.2f}% of balance)")
         close_all_trades()
-        no_trade=True
+        no_trade = True
     elif total_profit <= loss_threshold:
-        print(f"reusables.py: Closing all positions due to loss threshold breach. Total Loss: {total_profit} ({profit_or_loss_percentage:.2f}% of balance)")
+        print(
+            f"reusables.py: Closing all positions due to loss threshold breach. Total Loss: {total_profit} ({profit_or_loss_percentage:.2f}% of balance)")
         close_all_trades()
-        no_trade=True
+        no_trade = True
     else:
-        print(f"We are monitoring the trades. Current Total Profit/Loss: {total_profit} ({profit_or_loss_percentage:.2f}% of balance)")
+        print(
+            f"We are monitoring the trades. Current Total Profit/Loss: {total_profit} ({profit_or_loss_percentage:.2f}% of balance)")
+
 
 def mainExecutor(account_number, password, server):
     if connect_to_mt5(account_number, password, server):
         balance = get_account_balance()  # Retrieve and store account balance
         if balance is not None:  # Check if account balance was successfully retrieved
+            pairs = print_currency_pairs()  # Retrieve suggested pairs based on the day
             check_positions_and_close(balance)
-    if no_trade:
-        print(f"Opportunity to trade is open")
-
+            if no_trade:
+                print(f"Opportunity to trade is open with suggested pairs: {', '.join(pairs)}")
+            else:
+                print(f"Trades are open, monitoring market with pairs: {', '.join(pairs)}")
+    else:
+        print("Connection failed or balance not retrieved; unable to suggest pairs.")
