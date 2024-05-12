@@ -3,7 +3,7 @@ import MetaTrader5 as mt5
 import pandas as pd
 
 balance = None
-
+no_trade=False
 
 def connect_to_mt5(account_number, password, server):
     if not mt5.initialize():
@@ -87,9 +87,11 @@ def check_positions_and_close(balance):
     if total_profit >= profit_threshold:
         print(f"reusables.py: Closing all positions due to profit threshold breach. Total Profit: {total_profit} ({profit_or_loss_percentage:.2f}% of balance)")
         close_all_trades()
+        no_trade=True
     elif total_profit <= loss_threshold:
         print(f"reusables.py: Closing all positions due to loss threshold breach. Total Loss: {total_profit} ({profit_or_loss_percentage:.2f}% of balance)")
         close_all_trades()
+        no_trade=True
     else:
         print(f"We are monitoring the trades. Current Total Profit/Loss: {total_profit} ({profit_or_loss_percentage:.2f}% of balance)")
 
@@ -98,5 +100,6 @@ def mainExecutor(account_number, password, server):
         balance = get_account_balance()  # Retrieve and store account balance
         if balance is not None:  # Check if account balance was successfully retrieved
             check_positions_and_close(balance)
-    mt5.shutdown()
+    if no_trade:
+        print(f"Opportunity to trade is open")
 
