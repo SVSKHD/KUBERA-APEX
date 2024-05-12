@@ -1,10 +1,12 @@
 # reusables.py
 import MetaTrader5 as mt5
 import pandas as pd
+from datetime import datetime, timedelta
 import datetime
 
+
 balance = None
-no_trade = False
+no_open_trade = False
 
 
 # connecting to forex account
@@ -19,6 +21,33 @@ def connect_to_mt5(account_number, password, server):
         return False
     print("reusables.py : Connected to MT5 account #{}".format(account_number))
     return True
+
+
+def fetch_hourly_bars(symbol, bars_count=1000):
+    rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_H1, 0, bars_count)
+    mt5.shutdown()
+
+    if rates is None:
+        print("No rates retrieved, error code =", mt5.last_error())
+        return None
+
+    # Convert to list of dictionaries for easier handling
+    bars = [{'time': rate['time'], 'open': rate['open'], 'high': rate['high'],
+             'low': rate['low'], 'close': rate['close'], 'volume': rate['tick_volume']}
+            for rate in rates]
+    print("bars",bars)
+    return bars
+
+def fetch_and_process_bars_for_symbols(symbols):
+    bars_data = {}
+    for symbol in symbols:
+        bars = fetch_hourly_bars(symbol, 1000)  # Fetch 1000 hourly bars for each symbol
+        if bars:
+            bars_data[symbol] = bars
+            print(f"Successfully fetched bars for {symbol}")
+        else:
+            print(f"Failed to fetch bars for {symbol}")
+    return bars_data
 
 
 # get balance
@@ -62,6 +91,79 @@ def get_open_orders(open_params=None):
         print(df)
 
 
+
+# candle patterns------------------------
+# neutral trend
+def is_doji(bar):
+    body = abs(bar['close'] - bar['open'])
+    candle_range = bar['high'] - bar['low']
+    return body <= candle_range * 0.1
+
+# bearish patterns------------------------
+def is_evening_star(bars):
+    if len(bars) < 3:
+        return False
+
+    candle1, candle2, candle3 = bars[-3], bars[-2], bars[-1]
+    if candle1['close'] > candle1['open'] and candle3['close'] < candle3['open']:
+        if candle2['close'] > candle1['close'] and candle3['close'] < candle2['close'] and candle3['close'] < candle1[
+            'open']:
+            return True
+    return False
+
+def is_dark_cloud_cover(bars):
+    if len(bars) < 2:
+        return False
+
+    candle1, candle2 = bars[-2], bars[-1]
+    if candle1['open'] < candle1['close'] and candle2['open'] > candle1['high'] and candle2['close'] < (
+            candle1['open'] + candle1['close']) / 2:
+        return True
+    return False
+
+def is_engulfing(candle1, candle2):
+    if candle1['open'] > candle1['close'] and candle2['open'] < candle2['close']:
+        if candle2['open'] <= candle1['close'] and candle2['close'] >= candle1['open']:
+            return 'BULLISH'
+
+    elif candle1['open'] < candle1['close'] and candle2['open'] > candle2['close']:
+        if candle2['open'] >= candle1['open'] and candle2['close'] <= candle1['close']:
+            return 'BEARISH'
+
+    return 'NONE'
+
+# bullish patterns------------------------
+def is_hammer(candle):
+    # Define the criteria for a hammer
+    body = abs(candle['close'] - candle['open'])
+    candle_range = candle['high'] - candle['low']
+    lower_wick = min(candle['close'], candle['open']) - candle['low']
+    upper_wick = candle['high'] - max(candle['close'], candle['open'])
+
+    # Hammer: small body, long lower wick, very small or no upper wick
+    return body <= candle_range * 0.3 and lower_wick >= body * 2 and upper_wick <= body * 0.5
+
+
+def is_morning_star(bars):
+    if len(bars) < 3:
+        return False
+
+    candle1, candle2, candle3 = bars[-3], bars[-2], bars[-1]
+    if candle1['close'] < candle1['open'] and candle3['close'] > candle3['open']:
+        if candle2['close'] < candle1['close'] and candle3['close'] > candle2['close'] and candle3['close'] > candle1[
+            'open']:
+            return True
+    return False
+
+def is_piercing_line(bars):
+    if len(bars) < 2:
+        return False
+
+    candle1, candle2 = bars[-2], bars[-1]
+    if candle1['open'] > candle1['close'] and candle2['open'] < candle1['low'] and candle2['close'] > (
+            candle1['open'] + candle1['close']) / 2:
+        return True
+    return False
 # order management------------------------
 def close_all_trades():
     positions = mt5.positions_get()
@@ -102,6 +204,41 @@ def close_all_trades():
     return all_closed
 
 
+def order_send(symbol, order_type, volume, price=None, slippage=2, magic=0, comment=""):
+    symbol_info = mt5.symbol_info(symbol)
+    if symbol_info is None:
+        print("Failed to find symbol, order send failed.")
+        return None
+
+    if order_type == 'BUY':
+        order_type_mt5 = mt5.ORDER_TYPE_BUY
+        price = mt5.symbol_info_tick(symbol).ask if price is None else price
+    elif order_type == 'SELL':
+        order_type_mt5 = mt5.ORDER_TYPE_SELL
+        price = mt5.symbol_info_tick(symbol).bid if price is None else price
+    else:
+        print("Invalid order type.")
+        return None
+
+    request = {
+        "action": mt5.TRADE_ACTION_DEAL,
+        "symbol": symbol,
+        "volume": volume,
+        "type": order_type_mt5,
+        "price": price,
+        "slippage": slippage,
+        "magic": magic,
+        "comment": "KUBERA_APEX",
+        "type_filling": mt5.ORDER_FILLING_FOK,
+    }
+
+    result = mt5.order_send(request)
+    if not result or result.retcode != mt5.TRADE_RETCODE_DONE:
+        print(f"Order send failed, retcode={getattr(result, 'retcode', 'None')}")
+        return result
+
+    print(f"Order sent successfully, ticket={result.order}")
+    return result
 
 # profit and loss trades calculations------
 def check_positions_and_close(balance):
@@ -121,12 +258,12 @@ def check_positions_and_close(balance):
         print(
             f"reusables.py: Closing all positions due to profit threshold breach. Total Profit: {total_profit} ({profit_or_loss_percentage:.2f}% of balance)")
         close_all_trades()
-        no_trade = True
+        no_open_trade = True
     elif total_profit <= loss_threshold:
         print(
             f"reusables.py: Closing all positions due to loss threshold breach. Total Loss: {total_profit} ({profit_or_loss_percentage:.2f}% of balance)")
         close_all_trades()
-        no_trade = True
+        no_open_trade = True
     else:
         print(
             f"We are monitoring the trades. Current Total Profit/Loss: {total_profit} ({profit_or_loss_percentage:.2f}% of balance)")
@@ -137,8 +274,11 @@ def mainExecutor(account_number, password, server):
         balance = get_account_balance()  # Retrieve and store account balance
         if balance is not None:  # Check if account balance was successfully retrieved
             pairs = print_currency_pairs()  # Retrieve suggested pairs based on the day
+            symbol_list = pairs.split(", ")
+            bars_data = fetch_and_process_bars_for_symbols(symbol_list)
+            print(f"reusbales.py: {bars_data}")
             check_positions_and_close(balance)
-            if no_trade:
+            if no_open_trade:
                 print(f"Opportunity to trade is open with suggested pairs: {pairs}")
             else:
                 print(f"Trades are open, monitoring market with pairs: {pairs}")

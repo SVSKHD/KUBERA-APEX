@@ -280,7 +280,7 @@ def is_dark_cloud_cover(bars):
         return True
     return False
 
-
+# nuetral trend
 def is_doji(bar):
     body = abs(bar['close'] - bar['open'])
     candle_range = bar['high'] - bar['low']
