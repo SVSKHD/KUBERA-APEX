@@ -24,25 +24,38 @@ def connect_to_mt5(account_number, password, server):
 
 
 def fetch_hourly_bars(symbol, bars_count=1000):
+    if not mt5.initialize():
+        print("Initialize failed, error code =", mt5.last_error())
+        mt5.shutdown()
+        return None
+
     rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_H1, 0, bars_count)
-    mt5.shutdown()
 
     if rates is None:
         print("No rates retrieved, error code =", mt5.last_error())
+        mt5.shutdown()
         return None
 
     # Convert to list of dictionaries for easier handling
-    bars = [{'time': rate['time'], 'open': rate['open'], 'high': rate['high'],
-             'low': rate['low'], 'close': rate['close'], 'volume': rate['tick_volume']}
-            for rate in rates]
-    print("bars",bars)
+    bars = [{
+        'time': rate['time'],
+        'open': rate['open'],
+        'high': rate['high'],
+        'low': rate['low'],
+        'close': rate['close'],
+        'volume': rate['tick_volume']
+    } for rate in rates]
+
+    mt5.shutdown()  # Ensure MT5 connection is closed after the operation is completed
     return bars
 
 def fetch_and_process_bars_for_symbols(symbols):
+    """Fetch bar data for each symbol in the list and store it in a dictionary."""
+    print("Processing symbols:", symbols)
     bars_data = {}
     for symbol in symbols:
         bars = fetch_hourly_bars(symbol, 1000)  # Fetch 1000 hourly bars for each symbol
-        if bars:
+        if bars is not None:
             bars_data[symbol] = bars
             print(f"Successfully fetched bars for {symbol}")
         else:
@@ -82,13 +95,18 @@ def print_currency_pairs():
     return pairs
 
 
-def get_open_orders(open_params=None):
+def get_open_orders(symbols=None):
+    open_params = {}
+    if symbols:
+        open_params['symbol'] = symbols  # Ensure this key matches the expected key in the MT5 API
+
     open_orders = mt5.orders_get(**open_params) if open_params else mt5.orders_get()
     if open_orders is None:
-        print("reusables.py: No opened orders or failed to retrieve orders, error code =", mt5.last_error())
+        print("No opened orders or failed to retrieve orders, error code =", mt5.last_error())
     else:
         df = pd.DataFrame(list(open_orders), columns=open_orders[0]._asdict().keys())
         print(df)
+
 
 
 
@@ -241,32 +259,35 @@ def order_send(symbol, order_type, volume, price=None, slippage=2, magic=0, comm
     return result
 
 # profit and loss trades calculations------
-def check_positions_and_close(balance):
-    positions = mt5.positions_get()
-    if positions is None:
-        print("reusables.py: No open positions to check.")
-        return
-
-    total_profit = sum(pos.profit for pos in positions)
-    profit_or_loss_percentage = (total_profit / balance) * 100  # This works for both profit and loss
-
-    profit_threshold = 0.02 * balance
-    loss_threshold = -0.01 * balance
-
-    # Check if the total profit/loss exceeds the thresholds
-    if total_profit >= profit_threshold:
-        print(
-            f"reusables.py: Closing all positions due to profit threshold breach. Total Profit: {total_profit} ({profit_or_loss_percentage:.2f}% of balance)")
-        close_all_trades()
-        no_open_trade = True
-    elif total_profit <= loss_threshold:
-        print(
-            f"reusables.py: Closing all positions due to loss threshold breach. Total Loss: {total_profit} ({profit_or_loss_percentage:.2f}% of balance)")
-        close_all_trades()
-        no_open_trade = True
-    else:
-        print(
-            f"We are monitoring the trades. Current Total Profit/Loss: {total_profit} ({profit_or_loss_percentage:.2f}% of balance)")
+def check_positions_and_close(symbol,balance):
+    print(symbol, balance)
+    deals = mt5.positions_total()
+    print(deals)
+    # positions = mt5.positions_get(symbol)
+    # if positions is None:
+    #     print(f"reusables.py: No open positions to check.{positions}")
+    #     return
+    #
+    # total_profit = sum(pos.profit for pos in positions)
+    # profit_or_loss_percentage = (total_profit / balance) * 100  # This works for both profit and loss
+    #
+    # profit_threshold = 0.02 * balance
+    # loss_threshold = -0.01 * balance
+    #
+    # # Check if the total profit/loss exceeds the thresholds
+    # if total_profit >= profit_threshold:
+    #     print(
+    #         f"reusables.py: Closing all positions due to profit threshold breach. Total Profit: {total_profit} ({profit_or_loss_percentage:.2f}% of balance)")
+    #     close_all_trades()
+    #     no_open_trade = True
+    # elif total_profit <= loss_threshold:
+    #     print(
+    #         f"reusables.py: Closing all positions due to loss threshold breach. Total Loss: {total_profit} ({profit_or_loss_percentage:.2f}% of balance)")
+    #     close_all_trades()
+    #     no_open_trade = True
+    # else:
+    #     print(
+    #         f"We are monitoring the trades. Current Total Profit/Loss: {total_profit} ({profit_or_loss_percentage:.2f}% of balance)")
 
 
 def mainExecutor(account_number, password, server):
@@ -276,8 +297,7 @@ def mainExecutor(account_number, password, server):
             pairs = print_currency_pairs()  # Retrieve suggested pairs based on the day
             symbol_list = pairs.split(", ")
             bars_data = fetch_and_process_bars_for_symbols(symbol_list)
-            print(f"reusbales.py: {bars_data}")
-            check_positions_and_close(balance)
+            check_positions_and_close('GBPUSD',balance)
             if no_open_trade:
                 print(f"Opportunity to trade is open with suggested pairs: {pairs}")
             else:
