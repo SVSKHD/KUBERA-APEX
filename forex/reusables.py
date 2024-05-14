@@ -3,6 +3,7 @@ import MetaTrader5 as mt5
 import pandas as pd
 from datetime import datetime, timedelta
 import datetime
+import time
 
 
 balance = None
@@ -291,16 +292,18 @@ def check_positions_and_close(symbol,balance):
 
 
 def mainExecutor(account_number, password, server):
-    if connect_to_mt5(account_number, password, server):
-        balance = get_account_balance()  # Retrieve and store account balance
-        if balance is not None:  # Check if account balance was successfully retrieved
-            pairs = print_currency_pairs()  # Retrieve suggested pairs based on the day
-            symbol_list = pairs.split(", ")
-            bars_data = fetch_and_process_bars_for_symbols(symbol_list)
-            check_positions_and_close('GBPUSD',balance)
-            if no_open_trade:
-                print(f"Opportunity to trade is open with suggested pairs: {pairs}")
-            else:
-                print(f"Trades are open, monitoring market with pairs: {pairs}")
-    else:
-        print("Connection failed or balance not retrieved; unable to suggest pairs.")
+    while True:
+        if connect_to_mt5(account_number, password, server):
+            balance = get_account_balance()  # Retrieve and store account balance
+            if balance is not None:  # Check if account balance was successfully retrieved
+                pairs = print_currency_pairs()  # Retrieve suggested pairs based on the day
+                symbol_list = pairs.split(", ")
+                bars_data = fetch_and_process_bars_for_symbols(symbol_list)
+                check_positions_and_close('GBPUSD',balance)
+                if no_open_trade:
+                    print(f"Opportunity to trade is open with suggested pairs: {pairs}")
+                else:
+                    print(f"Trades are open, monitoring market with pairs: {pairs}")
+        else:
+            print("Connection failed or balance not retrieved; unable to suggest pairs.")
+    time.sleep(1)
