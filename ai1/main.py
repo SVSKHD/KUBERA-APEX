@@ -3,7 +3,8 @@ import logging
 from datetime import datetime
 from mt5_init import initialize_mt5, shutdown_mt5
 from trading_logic import manage_open_positions, update_trailing_stop_loss, log_and_print
-from trend_analysis import trade
+from trade_analysis import trade
+from config import MT5_LOGIN, MT5_PASSWORD, MT5_SERVER
 
 # Configure logging
 logging.basicConfig(filename='trading_bot.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -13,7 +14,6 @@ symbols = {
     'EURUSD': {'interval': 15, 'take_profit': 45},
     'GBPUSD': {'interval': 15, 'take_profit': 45}
 }
-
 
 def main_loop():
     last_order_prices = {symbol: {'buy': None, 'sell': None} for symbol in symbols}
@@ -30,9 +30,8 @@ def main_loop():
         log_and_print(f"Sleeping for {sleep_time} seconds...")
         time.sleep(sleep_time)
 
-
 if __name__ == "__main__":
-    initialize_mt5(login="your_login", password="your_password", server="your_server")
+    initialize_mt5(login=MT5_LOGIN, password=MT5_PASSWORD, server=MT5_SERVER)
     try:
         main_loop()
     finally:
