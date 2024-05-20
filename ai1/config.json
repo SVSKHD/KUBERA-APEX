@@ -1,0 +1,7 @@
+{
+    "risk_per_trade": 0.01,
+    "symbols": {
+        "EURUSD": {"interval": 15, "take_profit": 45},
+        "GBPUSD": {"interval": 15, "take_profit": 45}
+    }
+}

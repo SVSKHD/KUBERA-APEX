@@ -1,9 +1,11 @@
 import MetaTrader5 as mt5
-from reusable import log_and_print, place_order, close_order
+from reusable import log_and_print, place_order, close_order, get_account_balance, setup_logging, load_config
 import concurrent.futures
 import time
 from datetime import datetime
 import talib
+
+config = load_config('config.json')
 
 
 def get_current_price(symbol):
@@ -37,6 +39,9 @@ def calculate_levels(bid_price, ask_price, interval, take_profit, volatility):
         sell_take_profit = sell_price - take_profit * 0.0001
         buy_stop_loss = buy_price - atr
         sell_stop_loss = sell_price + atr
+        # Ensure stop-loss and take-profit respect the minimum stops level of 2.2 pips
+        buy_stop_loss = max(buy_stop_loss, bid_price - 2.2 * 0.0001)
+        sell_stop_loss = min(sell_stop_loss, ask_price + 2.2 * 0.0001)
         return buy_price, sell_price, buy_take_profit, sell_take_profit, buy_stop_loss, sell_stop_loss
     except Exception as e:
         log_and_print(f"Error calculating levels: {e}")
@@ -46,10 +51,11 @@ def calculate_levels(bid_price, ask_price, interval, take_profit, volatility):
 def calculate_position_size(balance, risk_per_trade, stop_loss_pips, pip_value):
     try:
         position_size = (balance * risk_per_trade) / (stop_loss_pips * pip_value)
-        return position_size
+        # Ensure position size fits micro-lot trading and respect the minimal volume
+        return max(0.01, round(position_size, 2))
     except Exception as e:
         log_and_print(f"Error calculating position size: {e}")
-        return 0.1
+        return 0.01
 
 
 def manage_open_positions(symbol, params, volatility):
@@ -68,8 +74,8 @@ def manage_open_positions(symbol, params, volatility):
             elif position.type == mt5.ORDER_TYPE_SELL:
                 if get_current_price(symbol)[0] > position.price_open + params['interval'] * 0.0001:
                     close_order(position.ticket)
-                    place_order(symbol, position.volume, mt5.ORDER_TYPE_BUY, get_current_price(symbol)[1], get
-                    current_price(symbol)[1] + params['take_profit'] * 0.0001, get
+                    place_order(symbol, position.volume, mt5.ORDER_TYPE_BUY, get_current_price(symbol)[1],
+                                get_current_price(symbol)[1] + params['take_profit'] * 0.0001, get
                     current_price(symbol)[1] - params['interval'] * 0.0001)
             except Exception as e:
             log_and_print(f"Error managing open positions for {symbol}: {e}")
@@ -87,16 +93,32 @@ def manage_open_positions(symbol, params, volatility):
 
                 if position.type == mt5.ORDER_TYPE_BUY:
                     new_stop_loss = current_bid - 10 * 0.0001
+                    new_stop_loss = max(new_stop_loss, current_bid - 2.2 * 0.0001)  # Ensure minimum stops level
                     if new_stop_loss > position.sl:
                         mt5.order_modify(position.ticket, stop_loss=new_stop_loss)
                 elif position.type == mt5.ORDER_TYPE_SELL:
                     new_stop_loss = current_ask + 10 * 0.0001
+                    new_stop_loss = min(new_stop_loss, current_ask + 2.2 * 0.0001)  # Ensure minimum stops level
                     if new_stop_loss < position.sl:
                         mt5.order_modify(position.ticket, stop_loss=new_stop_loss)
         except Exception as e:
             log_and_print(f"Error updating trailing stop loss for {symbol}: {e}")
 
-    def process_symbol(symbol, params):
+    def get_market_trend(symbol):
+        try:
+            rates = get_1h_data(symbol)
+            close_prices = [rate['close'] for rate in rates]
+            sma_short = talib.SMA(close_prices, timeperiod=50)[-1]
+            sma_long = talib.SMA(close_prices, timeperiod=200)[-1]
+            if sma_short > sma_long:
+                return "uptrend"
+            else:
+                return "downtrend"
+        except Exception as e:
+            log_and_print(f"Error getting market trend for {symbol}: {e}")
+            return None
+
+    def process_symbol(symbol, params, balance):
         try:
             rates = get_1h_data(symbol)
             if rates is None:
@@ -104,8 +126,8 @@ def manage_open_positions(symbol, params, volatility):
 
             close_prices = [rate['close'] for rate in rates]
             atr = talib.ATR(close_prices, timeperiod=14)[-1]  # ATR for volatility adjustment
-            balance = mt5.account_info().balance
-            position_size = calculate_position_size(balance, 0.01, 10, 10)
+            position_size = calculate_position_size(balance, config['risk_per_trade'], 10,
+                                                    0.10)  # Adjusted pip value for micro-lots
 
             manage_open_positions(symbol, params, atr)
             update_trailing_stop_loss(symbol)
@@ -125,11 +147,16 @@ def manage_open_positions(symbol, params, volatility):
             log_and_print(f"Error processing symbol {symbol}: {e}")
 
     def main_loop(symbols):
-        last_order_prices = {symbol: {'buy': None, 'sell': None} for symbol in symbols}
-
+        setup_logging()  # Initialize logging
         while True:
+            balance = get_account_balance()
+            if balance is None:
+                log_and_print("Failed to retrieve account balance. Exiting...")
+                return
+
             with concurrent.futures.ThreadPoolExecutor() as executor:
-                futures = [executor.submit(process_symbol, symbol, params) for symbol, params in symbols.items()]
+                futures = [executor.submit(process_symbol, symbol, params, balance) for symbol, params in
+                           symbols.items()]
                 for future in concurrent.futures.as_completed(futures):
                     try:
                         future.result()

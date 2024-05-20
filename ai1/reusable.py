@@ -3,10 +3,18 @@ import smtplib
 from email.mime.text import MIMEText
 import MetaTrader5 as mt5
 import time
+import json
+
+
+def setup_logging():
+    logging.basicConfig(filename='trading_bot.log', level=logging.INFO,
+                        format='%(asctime)s - %(levelname)s - %(message)s')
+
 
 def log_and_print(message):
     logging.info(message)
     print(message)
+
 
 def send_email(subject, body):
     try:
@@ -30,6 +38,7 @@ def send_email(subject, body):
     except Exception as e:
         log_and_print(f"Error sending email: {e}")
 
+
 def retry(func, retries=3, delay=5):
     for attempt in range(retries):
         try:
@@ -37,7 +46,9 @@ def retry(func, retries=3, delay=5):
         except Exception as e:
             log_and_print(f"Error: {e}, retrying in {delay} seconds...")
             time.sleep(delay)
+    log_and_print(f"Failed after {retries} retries")
     raise Exception(f"Failed after {retries} retries")
+
 
 def place_order(symbol, volume, order_type, price, take_profit, stop_loss):
     def send_order():
@@ -62,6 +73,7 @@ def place_order(symbol, volume, order_type, price, take_profit, stop_loss):
 
     return retry(send_order)
 
+
 def close_order(ticket):
     def send_close_order():
         position = mt5.positions_get(ticket=ticket)
@@ -74,7 +86,9 @@ def close_order(ticket):
             'symbol': position.symbol,
             'volume': position.volume,
             'type': mt5.ORDER_TYPE_SELL if position.type == mt5.ORDER_TYPE_BUY else mt5.ORDER_TYPE_BUY,
-            'price': mt5.symbol_info_tick(position.symbol).bid if position.type == mt5.ORDER_TYPE_BUY else mt5.symbol_info_tick(position.symbol).ask,
+            'price': mt5.symbol_info_tick(
+                position.symbol).bid if position.type == mt5.ORDER_TYPE_BUY else mt5.symbol_info_tick(
+                position.symbol).ask,
             'deviation': 10,
             'magic': 123456,
             'comment': "Closing Position",
@@ -87,3 +101,20 @@ def close_order(ticket):
         return result
 
     return retry(send_close_order)
+
+
+def get_account_balance():
+    try:
+        account_info = mt5.account_info()
+        if account_info is None:
+            raise ValueError("Failed to get account info")
+        return account_info.balance
+    except Exception as e:
+        log_and_print(f"Error getting account balance: {e}")
+        return None
+
+
+def load_config(file_path):
+    with open(file_path, 'r') as file:
+        config = json.load(file)
+    return config
