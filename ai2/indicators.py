@@ -50,3 +50,12 @@ def calculate_adx(data, period=14):
     adx = dx.rolling(window=period).mean()
 
     return adx
+
+
+def calculate_indicators(data):
+    data['rsi'] = calculate_rsi(data)
+    data['ma'] = calculate_ma(data)
+    data['upper_band'], data['lower_band'] = calculate_bollinger_bands(data)
+    data['macd'], data['macd_signal'] = calculate_macd(data)
+    data['adx'] = calculate_adx(data)
+    return data

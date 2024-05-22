@@ -1,14 +1,12 @@
 import MetaTrader5 as mt5
 import requests
 
-
 def calculate_lot_size(account_balance, risk_percentage, stop_loss_pips, symbol):
     risk_amount = account_balance * (risk_percentage / 100)
     symbol_info = mt5.symbol_info(symbol)
     tick_value = symbol_info.point
     lot_size = risk_amount / (stop_loss_pips * tick_value)
     return lot_size
-
 
 def place_trade(symbol, action, current_price, stop_loss, take_profit, lot_size):
     deviation = 10
@@ -36,6 +34,31 @@ def place_trade(symbol, action, current_price, stop_loss, take_profit, lot_size)
         print(f"Failed to execute order: {result.comment}")
     return result
 
+def close_trade(order_ticket):
+    position = mt5.positions_get(ticket=order_ticket)
+    if not position:
+        print(f"No position found with ticket {order_ticket}")
+        return
+
+    position = position[0]
+    action_type = mt5.ORDER_TYPE_SELL if position.type == mt5.ORDER_TYPE_BUY else mt5.ORDER_TYPE_BUY
+    deviation = 10
+
+    request = {
+        "action": mt5.TRADE_ACTION_DEAL,
+        "symbol": position.symbol,
+        "volume": position.volume,
+        "type": action_type,
+        "position": position.ticket,
+        "price": mt5.symbol_info_tick(position.symbol).bid if action_type == mt5.ORDER_TYPE_SELL else mt5.symbol_info_tick(position.symbol).ask,
+        "deviation": deviation,
+        "type_filling": mt5.ORDER_FILLING_FOK,
+    }
+
+    result = mt5.order_send(request)
+    if result.retcode != mt5.TRADE_RETCODE_DONE:
+        print(f"Failed to close order: {result.comment}")
+    return result
 
 def send_telegram_message(message, bot_token, chat_id):
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
