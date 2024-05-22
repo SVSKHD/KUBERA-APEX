@@ -1,4 +1,5 @@
 import MetaTrader5 as mt5
+import requests
 
 
 def calculate_lot_size(account_balance, risk_percentage, stop_loss_pips, symbol):
@@ -31,12 +32,15 @@ def place_trade(symbol, action, current_price, stop_loss, take_profit, lot_size)
     }
 
     result = mt5.order_send(request)
+    if result.retcode != mt5.TRADE_RETCODE_DONE:
+        print(f"Failed to execute order: {result.comment}")
     return result
 
 
 def send_telegram_message(message, bot_token, chat_id):
-    import requests
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
     params = {"chat_id": chat_id, "text": message}
     response = requests.get(url, params=params)
+    if response.status_code != 200:
+        print(f"Failed to send Telegram message: {response.text}")
     return response.json()
