@@ -1,6 +1,3 @@
-from indicators import calculate_indicators
-
-
 def generate_signal(data, current_price):
     ma = data['ma'].iloc[-1]
     rsi = data['rsi'].iloc[-1]
@@ -16,7 +13,6 @@ def generate_signal(data, current_price):
         return "SELL"
     else:
         return "HOLD"
-
 
 def generate_multitimeframe_signal(multi_data, current_price):
     signals = []
