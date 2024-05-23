@@ -1,8 +1,8 @@
 import time
 from dhan_connection import initialize_dhan
-from dhan_data_fetcher import fetch_data_dhan
+from data_fetcher import fetch_data_dhan
 from indicators import calculate_indicators
-from dhan_trade_executor import calculate_lot_size, place_order_dhan, close_order_dhan
+from dhan_trader_executor import calculate_lot_size, place_order_dhan, close_order_dhan
 from strategy import generate_multitimeframe_signal
 from concurrent.futures import ThreadPoolExecutor
 
