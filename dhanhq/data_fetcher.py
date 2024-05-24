@@ -14,3 +14,9 @@ def fetch_data_dhan(dhan, symbol, interval, days, is_option=False, strike_price=
     df = pd.DataFrame(data)
     df['date'] = pd.to_datetime(df['date'])
     return df
+
+
+def fetch_tradable_instruments(dhan):
+    # Fetch all tradable instruments (this is a placeholder, replace with actual API call)
+    instruments = dhan.get_all_tradable_instruments()
+    return instruments
