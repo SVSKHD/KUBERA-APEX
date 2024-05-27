@@ -4,23 +4,28 @@ from data_fetcher import fetch_data_dhan, fetch_tradable_instruments
 from indicators import calculate_indicators
 from dhan_trader_executor import calculate_lot_size, place_order_dhan, close_order_dhan, update_trailing_stop_loss
 from strategy import generate_multitimeframe_signal
-from concurrent.futures import ThreadPoolExecutor
 
 # Parameters
+client_id = "1100567724"
+access_token = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJkaGFuIiwicGFydG5lcklkIjoiIiwiZXhwIjoxNzE5MTU1ODkzLCJ0b2tlbkNvbnN1bWVyVHlwZSI6IlNFTEYiLCJ3ZWJob29rVXJsIjoiIiwiZGhhbkNsaWVudElkIjoiMTEwMDU2NzcyNCJ9.0cprkA0dIOG_j8ikgGWsMMKTrz0aKRC4axw6E6Jc_r4QpDGPJlJQfvK-G_snfjVeZ0a72C_LXs9ogKPbtmQbMQ"
 api_key = "your_api_key"
 api_secret = "your_api_secret"
-access_token = "your_access_token"
 timeframes = ["1minute", "5minute", "15minute"]
 days = 30
 risk_percentage = 1  # Risk 1% of account balance per trade
 stop_loss_pips = 10
 movement_pips = 15
 trail_pips = 5  # Trailing stop amount in pips
-daily_target = 20000  # Profit target in INR
 initial_balance = 10000  # Starting balance in INR
 
 # Initialize Dhan connection
-dhan = initialize_dhan(api_key, api_secret, access_token)
+dhan = initialize_dhan(client_id, access_token)
+
+
+def get_account_balance(dhan):
+    # Placeholder function to get account balance, replace with actual API call
+    account_info = dhan.get_account_info()
+    return account_info['balance']
 
 
 def estimate_profit(entry_price, take_profit, lot_size, direction):
@@ -110,13 +115,16 @@ try:
     tradable_instruments = fetch_tradable_instruments(dhan)
     symbols = [instr['symbol'] for instr in tradable_instruments if instr['tradable']]  # Filter tradable instruments
 
-    start_balance = initial_balance
-    daily_profit = 0
+    start_balance = get_account_balance(dhan)
+    target_balance = start_balance * 2
+    print(f"Starting balance: ₹{start_balance}. Target balance: ₹{target_balance}.")
+
     active_trades = []
 
-    while daily_profit < daily_target:
+    while get_account_balance(dhan) < target_balance:
+        current_balance = get_account_balance(dhan)
         best_trades = select_best_trades(dhan, symbols, timeframes, days, risk_percentage, stop_loss_pips,
-                                         movement_pips, start_balance + daily_profit)
+                                         movement_pips, current_balance)
 
         if not best_trades:
             print("No suitable trades found. Retrying...")
@@ -140,17 +148,10 @@ try:
                 close_order_dhan(dhan, trade["symbol"], is_option=trade["is_option"])
                 active_trades.remove(trade)
 
-        # Update daily profit based on closed trades
-        daily_profit = sum([
-            (trade["take_profit"] - trade["entry_price"]) * trade["lot_size"] if trade["action"] == "BUY" else
-            (trade["entry_price"] - trade["take_profit"]) * trade["lot_size"]
-            for trade in active_trades if
-            (trade["action"] == "BUY" and current_price >= trade["take_profit"]) or
-            (trade["action"] == "SELL" and current_price <= trade["take_profit"])
-        ])
-        print(f"Current daily profit: ₹{daily_profit}")
+        current_profit = current_balance - start_balance
+        print(f"Current profit: ₹{current_profit}. Current balance: ₹{current_balance}.")
         time.sleep(60)
 
-    print(f"Daily profit target of ₹{daily_target} reached.")
+    print(f"Target balance of ₹{target_balance} reached.")
 finally:
     print("Shutting down trading bot.")

@@ -1,5 +1,6 @@
 import pandas as pd
 
+
 def calculate_rsi(data, period=14):
     delta = data['close'].diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
@@ -8,8 +9,10 @@ def calculate_rsi(data, period=14):
     rsi = 100 - (100 / (1 + rs))
     return rsi
 
+
 def calculate_ma(data, period=20):
     return data['close'].rolling(window=period).mean()
+
 
 def calculate_bollinger_bands(data, period=20, std_dev=2):
     ma = data['close'].rolling(window=period).mean()
@@ -18,12 +21,14 @@ def calculate_bollinger_bands(data, period=20, std_dev=2):
     lower_band = ma - (std * std_dev)
     return upper_band, lower_band
 
+
 def calculate_macd(data, short_period=12, long_period=26, signal_period=9):
     short_ema = data['close'].ewm(span=short_period, adjust=False).mean()
     long_ema = data['close'].ewm(span=long_period, adjust=False).mean()
     macd = short_ema - long_ema
     signal = macd.ewm(span=signal_period, adjust=False).mean()
     return macd, signal
+
 
 def calculate_adx(data, period=14):
     high = data['high']
@@ -45,6 +50,7 @@ def calculate_adx(data, period=14):
     adx = dx.rolling(window=period).mean()
 
     return adx
+
 
 def calculate_indicators(data):
     data['rsi'] = calculate_rsi(data)
