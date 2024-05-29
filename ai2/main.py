@@ -8,9 +8,9 @@ from strategy import generate_multitimeframe_signal
 from concurrent.futures import ThreadPoolExecutor
 
 # Parameters
-account = 12345678
-password = "password"
-server = "broker_server"
+account = 212792645
+password = 'pn^eNL4U'
+server = 'OctaFX-Demo'
 symbols = ["EURUSD", "GBPUSD", "USDJPY"]
 timeframes = [mt5.TIMEFRAME_M1, mt5.TIMEFRAME_M5, mt5.TIMEFRAME_M15]  # Multiple timeframes
 n_bars = 500
@@ -32,6 +32,8 @@ def trade_for_symbol(symbol):
     last_price = None
     active_trades = []
 
+    print(f"Observing market for {symbol}...")
+
     while daily_profit < daily_target:
         multi_data = fetch_multiple_timeframes(symbol, timeframes, n_bars)
         for timeframe in multi_data:
@@ -42,6 +44,9 @@ def trade_for_symbol(symbol):
 
         account_balance = mt5.account_info().balance
         lot_size = calculate_lot_size(account_balance, risk_percentage, stop_loss_pips, symbol)
+
+        # Print statements to indicate active market observation
+        print(f"Checking market for {symbol} at price {current_price} with signal {signal}...")
 
         # Check for price movement of 15 pips
         if last_price is None or abs(current_price - last_price) >= movement_pips * mt5.symbol_info(symbol).point:
@@ -75,7 +80,11 @@ def trade_for_symbol(symbol):
 
         # Update daily profit
         daily_profit = mt5.account_info().balance - start_balance
-        time.sleep(60)  # Check every minute
+
+        # Print current profit status
+        print(f"Current profit for {symbol}: ${daily_profit:.2f}")
+
+        time.sleep(1)  # Check every minute
 
     print(f"Daily profit target of ${daily_target} reached for {symbol}")
 
