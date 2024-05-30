@@ -8,20 +8,19 @@ from pymongo import MongoClient
 mt5.initialize()
 
 # Account login
-account = 12345678
-password = "your_password"
-server = "your_server"
+account = 212792645
+password = 'pn^eNL4U'
+server = 'OctaFX-Demo'
 mt5.login(account, password, server)
 
 # MongoDB connection placeholder
-mongo_url = "your_mongodb_atlas_url"  # Replace with your MongoDB Atlas URL
+mongo_url = "mongodb+srv://utbiz:utbiz@utbiz.pdnb9ro.mongodb.net/?retryWrites=true&w=majority&appName=utbiz"  # Replace with your MongoDB Atlas URL
 client = MongoClient(mongo_url)
 db = client.KuberaApexForex
 balance_collection = db.balance_data
 
 # Log database connection success
 print("Database connected successfully")
-
 
 # Function to load balance data from MongoDB
 def load_balance_data():
@@ -38,12 +37,10 @@ def load_balance_data():
         balance_collection.insert_one(balance_data)
         return balance_data
 
-
 # Function to save balance data to MongoDB
 def save_balance_data(balance_data):
     balance_data["timestamp"] = datetime.now()
     balance_collection.insert_one(balance_data)
-
 
 # Function to fetch historical data
 def fetch_data(symbol, timeframe, n_bars):
@@ -51,7 +48,6 @@ def fetch_data(symbol, timeframe, n_bars):
     df = pd.DataFrame(rates)
     df['time'] = pd.to_datetime(df['time'], unit='s')
     return df
-
 
 # Function to detect trend
 def detect_trend(df):
@@ -61,16 +57,19 @@ def detect_trend(df):
             return trend
     return None
 
-
 # Function for dynamic lot sizing
 def calculate_lot_size(balance, risk_percentage):
     risk_amount = balance * (risk_percentage / 100)
     lot_size = risk_amount / 100000  # Simplified calculation
-    return round(lot_size, 2)
-
+    lot_size = max(0.01, round(lot_size, 2))  # Ensure the minimum lot size is 0.01
+    print(f"Calculated lot size: {lot_size}")  # Debug log
+    return lot_size
 
 # Function to place a trade with trailing stop loss
 def place_trade_with_trailing_stop(symbol, trend, lot_size, trailing_stop_pips):
+    if lot_size == 0:
+        print("Lot size is 0, skipping trade")
+        return None  # Skip placing the trade if lot size is 0
     order_type = mt5.ORDER_TYPE_BUY if trend == 'up' else mt5.ORDER_TYPE_SELL
     price = mt5.symbol_info_tick(symbol).ask if order_type == mt5.ORDER_TYPE_BUY else mt5.symbol_info_tick(symbol).bid
 
@@ -82,12 +81,11 @@ def place_trade_with_trailing_stop(symbol, trend, lot_size, trailing_stop_pips):
         "price": price,
         "deviation": 10,
         "type_filling": mt5.ORDER_FILLING_FOK,
-        "sl": price - (trailing_stop_pips * 0.0001) if order_type == mt5.ORDER_TYPE_BUY else price + (
-                    trailing_stop_pips * 0.0001)
+        "sl": price - (trailing_stop_pips * 0.0001) if order_type == mt5.ORDER_TYPE_BUY else price + (trailing_stop_pips * 0.0001)
     }
     result = mt5.order_send(request)
+    print(f"Trade result: {result}")  # Debug log
     return result
-
 
 # Monitoring and trade management
 def trade_management(symbol, trend, interval_pips, daily_target, balance_data):
@@ -101,20 +99,20 @@ def trade_management(symbol, trend, interval_pips, daily_target, balance_data):
         # Check if daily profit target is reached
         while balance_data['cumulative_gains'] < daily_target:
             result_a = place_trade_with_trailing_stop(symbol, trend, lot_size, trailing_stop_pips)
-            if result_a.retcode != mt5.TRADE_RETCODE_DONE:
+            if not result_a or result_a.retcode != mt5.TRADE_RETCODE_DONE:
                 return  # Trade was not successful
 
             # Wait for a-b interval
             time.sleep(3600)
 
             result_b = place_trade_with_trailing_stop(symbol, trend, lot_size, trailing_stop_pips)
-            if result_b.retcode != mt5.TRADE_RETCODE_DONE:
+            if not result_b or result_b.retcode != mt5.TRADE_RETCODE_DONE:
                 return  # Trade was not successful
 
             time.sleep(3600)
 
             result_c = place_trade_with_trailing_stop(symbol, trend, lot_size, trailing_stop_pips)
-            if result_c.retcode != mt5.TRADE_RETCODE_DONE:
+            if not result_c or result_c.retcode != mt5.TRADE_RETCODE_DONE:
                 return  # Trade was not successful
 
             # Monitoring for opposite direction movement
@@ -137,8 +135,7 @@ def trade_management(symbol, trend, interval_pips, daily_target, balance_data):
                         "volume": position.volume,
                         "type": mt5.ORDER_TYPE_BUY if position.type == mt5.ORDER_TYPE_SELL else mt5.ORDER_TYPE_SELL,
                         "position": position.ticket,
-                        "price": mt5.symbol_info_tick(
-                            symbol).ask if position.type == mt5.ORDER_TYPE_SELL else mt5.symbol_info_tick(symbol).bid,
+                        "price": mt5.symbol_info_tick(symbol).ask if position.type == mt5.ORDER_TYPE_SELL else mt5.symbol_info_tick(symbol).bid,
                         "deviation": 10,
                         "type_filling": mt5.ORDER_FILLING_FOK,
                     }
@@ -149,7 +146,6 @@ def trade_management(symbol, trend, interval_pips, daily_target, balance_data):
             # Break loop if daily target is reached
             if balance_data['cumulative_gains'] >= daily_target:
                 break
-
 
 # Main trading loop
 symbols = ["EURUSD", "GBPUSD"]
