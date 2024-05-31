@@ -4,6 +4,7 @@ import pandas as pd
 import time
 from datetime import datetime
 import db_operations as db
+import numpy as np
 
 # Initialize MT5 connection
 mt5.initialize()
@@ -24,18 +25,25 @@ def fetch_data(symbol, timeframe, n_bars):
     df['time'] = pd.to_datetime(df['time'], unit='s')
     return df
 
-# Function to detect trend
+# Function to calculate moving averages
+def calculate_moving_averages(df, short_window=5, long_window=20):
+    df['short_ma'] = df['close'].rolling(window=short_window).mean()
+    df['long_ma'] = df['close'].rolling(window=long_window).mean()
+    return df
+
+# Function to detect trend using moving averages
 def detect_trend(df):
-    for i in range(len(df) - 1):
-        if abs(df['close'][i + 1] - df['close'][i]) >= 10 * 0.0001:
-            trend = 'up' if df['close'][i + 1] > df['close'][i] else 'down'
-            return trend
+    df = calculate_moving_averages(df)
+    if df['short_ma'].iloc[-1] > df['long_ma'].iloc[-1]:
+        return 'up'
+    elif df['short_ma'].iloc[-1] < df['long_ma'].iloc[-1]:
+        return 'down'
     return None
 
-# Function for dynamic lot sizing
-def calculate_lot_size(balance, risk_percentage):
+# Function for dynamic lot sizing based on risk
+def calculate_lot_size(balance, risk_percentage, stop_loss_pips):
     risk_amount = balance * (risk_percentage / 100)
-    lot_size = risk_amount / 100000  # Simplified calculation
+    lot_size = risk_amount / (stop_loss_pips * 0.0001 * 100000)  # Simplified calculation
     lot_size = max(0.01, round(lot_size, 2))  # Ensure the minimum lot size is 0.01
     print(f"Calculated lot size: {lot_size}")  # Debug log
     return lot_size
@@ -50,13 +58,14 @@ def identify_candlestick_patterns(df):
             patterns.append(('bearish', i))
     return patterns
 
-# Function to place a trade with trailing stop loss
-def place_trade_with_trailing_stop(symbol, trend, lot_size, trailing_stop_pips):
+# Function to place a trade with dynamic stop loss
+def place_trade_with_stop_loss(symbol, trend, lot_size, stop_loss_pips):
     if lot_size == 0:
         print("Lot size is 0, skipping trade")
         return None  # Skip placing the trade if lot size is 0
     order_type = mt5.ORDER_TYPE_BUY if trend == 'up' else mt5.ORDER_TYPE_SELL
     price = mt5.symbol_info_tick(symbol).ask if order_type == mt5.ORDER_TYPE_BUY else mt5.symbol_info_tick(symbol).bid
+    sl_price = price - (stop_loss_pips * 0.0001) if order_type == mt5.ORDER_TYPE_BUY else price + (stop_loss_pips * 0.0001)
 
     request = {
         "action": mt5.TRADE_ACTION_DEAL,
@@ -64,9 +73,9 @@ def place_trade_with_trailing_stop(symbol, trend, lot_size, trailing_stop_pips):
         "volume": lot_size,
         "type": order_type,
         "price": price,
+        "sl": sl_price,
         "deviation": 10,
-        "type_filling": mt5.ORDER_FILLING_FOK,
-        "sl": price - (trailing_stop_pips * 0.0001) if order_type == mt5.ORDER_TYPE_BUY else price + (trailing_stop_pips * 0.0001)
+        "type_filling": mt5.ORDER_FILLING_FOK
     }
     result = mt5.order_send(request)
     trade_type = "Buy" if order_type == mt5.ORDER_TYPE_BUY else "Sell"
@@ -75,14 +84,13 @@ def place_trade_with_trailing_stop(symbol, trend, lot_size, trailing_stop_pips):
     return result
 
 # Function to manage trades and detect trend reversals
-def trade_management(symbol, trend, interval_pips, daily_target, balance_data):
+def trade_management(symbol, trend, stop_loss_pips, daily_target, balance_data):
     df = fetch_data(symbol, mt5.TIMEFRAME_H1, 100)
     current_trend = detect_trend(df)
     if current_trend == trend:
         print(f"Detected trend for {symbol}: {trend}")  # Log the detected trend
         balance = mt5.account_info().balance
-        lot_size = calculate_lot_size(balance, 1)  # 1% risk
-        trailing_stop_pips = 10  # Set trailing stop to 10 pips
+        lot_size = calculate_lot_size(balance, 1, stop_loss_pips)  # 1% risk
 
         # Identify candlestick patterns
         patterns = identify_candlestick_patterns(df)
@@ -91,20 +99,20 @@ def trade_management(symbol, trend, interval_pips, daily_target, balance_data):
 
         # Check if daily profit target is reached
         while balance_data['cumulative_gains'] < daily_target:
-            result_a = place_trade_with_trailing_stop(symbol, trend, lot_size, trailing_stop_pips)
+            result_a = place_trade_with_stop_loss(symbol, trend, lot_size, stop_loss_pips)
             if not result_a or result_a.retcode != mt5.TRADE_RETCODE_DONE:
                 return  # Trade was not successful
 
             # Wait for a-b interval
             time.sleep(3600)
 
-            result_b = place_trade_with_trailing_stop(symbol, trend, lot_size, trailing_stop_pips)
+            result_b = place_trade_with_stop_loss(symbol, trend, lot_size, stop_loss_pips)
             if not result_b or result_b.retcode != mt5.TRADE_RETCODE_DONE:
                 return  # Trade was not successful
 
             time.sleep(3600)
 
-            result_c = place_trade_with_trailing_stop(symbol, trend, lot_size, trailing_stop_pips)
+            result_c = place_trade_with_stop_loss(symbol, trend, lot_size, stop_loss_pips)
             if not result_c or result_c.retcode != mt5.TRADE_RETCODE_DONE:
                 return  # Trade was not successful
 
@@ -143,7 +151,7 @@ def trade_management(symbol, trend, interval_pips, daily_target, balance_data):
                 balance_data['losses'] += loss_amount
                 print(f"Trade closed in loss. Loss amount: {loss_amount}")
                 db.record_loss_recovery(loss_amount, 0)
-            save_balance_data(balance_data)
+            db.save_balance_data(balance_data)
             # Break loop if daily target is reached
             if balance_data['cumulative_gains'] >= daily_target:
                 break
@@ -171,6 +179,8 @@ symbols = ["EURUSD", "GBPUSD"]
 daily_target_percentage = 10  # Target 10% of capital per day
 
 balance_data = db.load_balance_data()
+db.check_and_log_losses()  # Check and log losses before starting the trading loop
+
 while True:
     recover_losses_and_target(symbols, balance_data, daily_target_percentage)
     for symbol in symbols:
