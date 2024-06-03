@@ -1,10 +1,11 @@
-# main.py
 import MetaTrader5 as mt5
 import pandas as pd
 import time
 from datetime import datetime
 import db_operations as db
 import numpy as np
+import matplotlib.pyplot as plt
+import mplfinance as mpf
 
 # Initialize MT5 connection
 mt5.initialize()
@@ -18,7 +19,6 @@ mt5.login(account, password, server)
 # Initialize database
 db.initialize_db()
 
-
 # Function to fetch historical data
 def fetch_data(symbol, timeframe, n_bars):
     rates = mt5.copy_rates_from_pos(symbol, timeframe, 0, n_bars)
@@ -26,13 +26,11 @@ def fetch_data(symbol, timeframe, n_bars):
     df['time'] = pd.to_datetime(df['time'], unit='s')
     return df
 
-
 # Function to calculate moving averages
 def calculate_moving_averages(df, short_window=5, long_window=20):
     df['short_ma'] = df['close'].rolling(window=short_window).mean()
     df['long_ma'] = df['close'].rolling(window=long_window).mean()
     return df
-
 
 # Function to detect trend using moving averages
 def detect_trend(df):
@@ -43,7 +41,6 @@ def detect_trend(df):
         return 'down'
     return None
 
-
 # Function for dynamic lot sizing based on risk
 def calculate_lot_size(balance, risk_percentage, stop_loss_pips):
     risk_amount = balance * (risk_percentage / 100)
@@ -52,19 +49,15 @@ def calculate_lot_size(balance, risk_percentage, stop_loss_pips):
     print(f"Calculated lot size: {lot_size}")  # Debug log
     return lot_size
 
-
 # Function to identify candlestick patterns
 def identify_candlestick_patterns(df):
     patterns = []
     for i in range(1, len(df) - 1):
-        if df['close'][i] > df['open'][i] and df['close'][i] > df['close'][i - 1] and df['close'][i + 1] > df['close'][
-            i]:
+        if df['close'][i] > df['open'][i] and df['close'][i] > df['close'][i - 1] and df['close'][i + 1] > df['close'][i]:
             patterns.append(('bullish', i))
-        elif df['close'][i] < df['open'][i] and df['close'][i] < df['close'][i - 1] and df['close'][i + 1] < \
-                df['close'][i]:
+        elif df['close'][i] < df['open'][i] and df['close'][i] < df['close'][i - 1] and df['close'][i + 1] < df['close'][i]:
             patterns.append(('bearish', i))
     return patterns
-
 
 # Function to place a trade with dynamic stop loss
 def place_trade_with_stop_loss(symbol, trend, lot_size, stop_loss_pips):
@@ -73,8 +66,7 @@ def place_trade_with_stop_loss(symbol, trend, lot_size, stop_loss_pips):
         return None  # Skip placing the trade if lot size is 0
     order_type = mt5.ORDER_TYPE_BUY if trend == 'up' else mt5.ORDER_TYPE_SELL
     price = mt5.symbol_info_tick(symbol).ask if order_type == mt5.ORDER_TYPE_BUY else mt5.symbol_info_tick(symbol).bid
-    sl_price = price - (stop_loss_pips * 0.0001) if order_type == mt5.ORDER_TYPE_BUY else price + (
-                stop_loss_pips * 0.0001)
+    sl_price = price - (stop_loss_pips * 0.0001) if order_type == mt5.ORDER_TYPE_BUY else price + (stop_loss_pips * 0.0001)
 
     request = {
         "action": mt5.TRADE_ACTION_DEAL,
@@ -91,7 +83,6 @@ def place_trade_with_stop_loss(symbol, trend, lot_size, stop_loss_pips):
     print(f"Trade placed: {trade_type} for {symbol} at price {price}, Lot size: {lot_size}")
     print(f"Trade result: {result}")  # Debug log
     return result
-
 
 # Function to manage trades and detect trend reversals
 def trade_management(symbol, trend, stop_loss_pips, daily_target, balance_data):
@@ -146,14 +137,14 @@ def trade_management(symbol, trend, stop_loss_pips, daily_target, balance_data):
                         "volume": position.volume,
                         "type": mt5.ORDER_TYPE_BUY if position.type == mt5.ORDER_TYPE_SELL else mt5.ORDER_TYPE_SELL,
                         "position": position.ticket,
-                        "price": mt5.symbol_info_tick(
-                            symbol).ask if position.type == mt5.ORDER_TYPE_SELL else mt5.symbol_info_tick(symbol).bid,
+                        "price": mt5.symbol_info_tick(symbol).ask if position.type == mt5.ORDER_TYPE_SELL else mt5.symbol_info_tick(symbol).bid,
                         "deviation": 10,
                         "type_filling": mt5.ORDER_FILLING_FOK,
                     }
                     mt5.order_send(close_request)
                 # Log trade closure
                 print(f"Closed all trades for {symbol} due to opposite trend detected")
+
             # Update balance data and save
             current_balance = mt5.account_info().balance
             balance_data['cumulative_gains'] = current_balance - balance_data['initial_balance']
@@ -162,11 +153,14 @@ def trade_management(symbol, trend, stop_loss_pips, daily_target, balance_data):
                 balance_data['losses'] += loss_amount
                 print(f"Trade closed in loss. Loss amount: {loss_amount}")
                 db.record_loss_recovery(loss_amount, 0)
+            else:
+                gain_amount = current_balance - balance_data['initial_balance'] - balance_data['cumulative_gains']
+                balance_data['cumulative_gains'] += gain_amount
+                print(f"Trade closed in profit. Profit amount: {gain_amount}")
             db.save_balance_data(balance_data)
             # Break loop if daily target is reached
             if balance_data['cumulative_gains'] >= daily_target:
                 break
-
 
 # Function to recover losses and achieve target
 def recover_losses_and_target(symbols, balance_data, daily_target_percentage):
@@ -185,9 +179,10 @@ def recover_losses_and_target(symbols, balance_data, daily_target_percentage):
         balance = mt5.account_info().balance
         daily_target = balance * (daily_target_percentage / 100)
 
-        if balance_data['cumulative_gains'] < daily_target:
+        df = fetch_data(symbol, mt5.TIMEFRAME_H1, 100)
+        trend = detect_trend(df)
+        if trend and balance_data['cumulative_gains'] < daily_target:
             trade_management(symbol, trend, 10, daily_target, balance_data)
-
 
 # Main trading loop
 symbols = ["EURUSD", "GBPUSD"]
@@ -206,3 +201,20 @@ while True:
             daily_target = balance * (daily_target_percentage / 100)
             trade_management(symbol, trend, 10, daily_target, balance_data)
     time.sleep(3600)  # Wait for an hour before checking again
+
+# Optional: Plot the data with patterns
+# for symbol in symbols:
+#     df = fetch_data(symbol, mt5.TIMEFRAME_H1, 100)
+#     patterns = identify_candlestick_patterns(df)
+#     fig, ax = plt.subplots(figsize=(10, 6))
+#     mpf.plot(df, type='candle', style='charles', ax=ax)
+#     for pattern in patterns:
+#         if pattern[0] == 'bullish':
+#             ax.scatter(df.index[pattern[1]], df.loc[df.index[pattern[1]], 'close'], color='green', marker='^', s=100)
+#         elif pattern[0] == 'bearish':
+#             ax.scatter(df.index[pattern[1]], df.loc[df.index[pattern[1]], 'close'], color='red', marker='v', s=100)
+#     plt.title(f'{symbol} H1 Candlestick Chart with Detected Patterns')
+#     plt.show()
+
+# Shutdown MT5 connection
+mt5.shutdown()
