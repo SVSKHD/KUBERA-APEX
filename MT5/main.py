@@ -26,8 +26,7 @@ print(f"Initial balance: {initial_balance}")
 # Define symbols and parameters
 symbols_weekday = [
     "EURUSD", "GBPUSD", "USDJPY", "EURJPY", "GBPJPY",
-    "EURGBP", "USDCHF", "AUDUSD", "USDCAD",
-    "USDTRY", "USDZAR", "USDBRL", "GBPAUD", "NZDJPY"
+    "EURGBP", "USDCHF", "AUDUSD", "USDCAD","GBPAUD", "NZDJPY"
 ]
 symbols_weekend = ["BTCUSD", "ETHUSD"]
 timeframes = [mt5.TIMEFRAME_M15, mt5.TIMEFRAME_H1, mt5.TIMEFRAME_H4]  # Standard timeframes

@@ -1,8 +1,8 @@
-import numpy as np
-from mt5_handler import get_current_price, place_trade
-from datetime import datetime
+
 import MetaTrader5 as mt5
 import pandas as pd
+import numpy as np
+from datetime import datetime
 
 def calculate_atr(df, period=14):
     df['tr'] = np.maximum(df['high'] - df['low'], np.maximum(abs(df['high'] - df['close'].shift()), abs(df['low'] - df['close'].shift())))
@@ -42,8 +42,43 @@ def get_trading_symbols():
     else:
         return symbols_weekday, True
 
+def place_trade(symbol, trade_type, lot_size, price):
+    if trade_type == 'buy':
+        order_type = mt5.ORDER_TYPE_BUY
+    elif trade_type == 'sell':
+        order_type = mt5.ORDER_TYPE_SELL
+    else:
+        return
+
+    request = {
+        "action": mt5.TRADE_ACTION_DEAL,
+        "symbol": symbol,
+        "volume": lot_size,
+        "type": order_type,
+        "price": price,
+        "deviation": 10,
+        "magic": 234000,
+        "comment": "python script open",
+        "type_time": mt5.ORDER_TIME_GTC,
+        "type_filling": mt5.ORDER_FILLING_FOK,
+    }
+
+    result = mt5.order_send(request)
+    if result.retcode != mt5.TRADE_RETCODE_DONE:
+        print(f"Order failed, retcode={result.retcode}")
+    else:
+        print(f"Trade successful: {result}")
+
 def fetch_all_time_high(symbol):
     rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_H1, 0, 1000000)
     df = pd.DataFrame(rates)
     all_time_high = df['high'].max()
     return all_time_high
+
+def identify_volume_spikes(df, volume_threshold):
+    spikes = []
+    for i in range(1, len(df)):
+        if df['volume'][i] > volume_threshold:
+            spikes.append((df['time'][i], df['volume'][i], 'spike'))
+            print(f"Volume spike identified at {df['time'][i]}: {df['volume'][i]}")
+    return spikes
