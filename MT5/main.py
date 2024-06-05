@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from db import MongoDBHandler
 from mt5_handler import initialize_mt5, login_mt5, get_account_balance
 from data_handler import fetch_data
-from trading_logic import calculate_atr, identify_movements, calculate_lot_size, place_trade, fetch_all_time_high, adjust_cooldown_period, get_trading_symbols
+from trading_logic import calculate_atr, identify_movements, calculate_lot_size, place_trade, adjust_cooldown_period, get_trading_symbols
 
 # Initialize and login to MT5
 if not initialize_mt5():
@@ -30,7 +30,7 @@ symbols_weekday = [
     "USDTRY", "USDZAR", "USDBRL", "GBPAUD", "NZDJPY"
 ]
 symbols_weekend = ["BTCUSD", "ETHUSD"]
-timeframes = [mt5.TIMEFRAME_M15, mt5.TIMEFRAME_H1, mt5.TIMEFRAME_H4]  # Multi-timeframe analysis
+timeframes = [mt5.TIMEFRAME_M15, mt5.TIMEFRAME_H1, mt5.TIMEFRAME_H4]  # Standard timeframes
 threshold = 0.092  # Threshold for significant movement
 risk_percentage = 0.01  # Risk 1% of account balance per trade
 daily_profit_target_low = 0.05  # 5% daily profit target
@@ -55,6 +55,7 @@ def run_trading_bot():
 
     for symbol in trading_symbols:
         for timeframe in timeframes:
+            print(f"Fetching data for {symbol} on timeframe {timeframe}")
             df = fetch_data(symbol, timeframe, start_time, end_time)
             if df.empty:
                 print(f"No data fetched for {symbol} on timeframe {timeframe}")
