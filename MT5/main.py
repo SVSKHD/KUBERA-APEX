@@ -1,139 +1,52 @@
 import MetaTrader5 as mt5
-import pandas as pd
 import time
 import schedule
 from datetime import datetime, timedelta
 from db import MongoDBHandler
-import numpy as np
+from mt5_handler import initialize_mt5, login_mt5, get_account_balance
+from data_handler import fetch_data
+from trading_logic import calculate_atr, identify_movements, calculate_lot_size, place_trade, fetch_all_time_high, adjust_cooldown_period, get_trading_symbols
 
-# Initialize MT5 and connect
-if not mt5.initialize():
-    print("initialize() failed")
-    mt5.shutdown()
+# Initialize and login to MT5
+if not initialize_mt5():
+    print("Failed to initialize MT5")
+    exit()
 
-# Login to your account (replace with your details)
-account = 212792645
-password = 'pn^eNL4U'
-server = 'OctaFX-Demo'
-if not mt5.login(account, password=password, server=server):
-    print("Failed to connect to account.")
+if not login_mt5(account=212792645, password='pn^eNL4U', server='OctaFX-Demo'):
+    print("Failed to connect to account")
     mt5.shutdown()
+    exit()
 else:
     print("Connected to MT5 account")
+
+# Fetch account information
+initial_balance = get_account_balance()
+print(f"Initial balance: {initial_balance}")
 
 # Define symbols and parameters
 symbols_weekday = [
     "EURUSD", "GBPUSD", "USDJPY", "EURJPY", "GBPJPY",
     "EURGBP", "USDCHF", "AUDUSD", "USDCAD",
+    "USDTRY", "USDZAR", "USDBRL", "GBPAUD", "NZDJPY"
 ]
 symbols_weekend = ["BTCUSD", "ETHUSD"]
 timeframes = [mt5.TIMEFRAME_M15, mt5.TIMEFRAME_H1, mt5.TIMEFRAME_H4]  # Multi-timeframe analysis
-threshold = 0.001  # Threshold for significant movement
-initial_balance = 1000  # Starting balance in USD
+threshold = 0.092  # Threshold for significant movement
 risk_percentage = 0.01  # Risk 1% of account balance per trade
-cooldown_period_base = 3600  # Base cooldown period in seconds
 daily_profit_target_low = 0.05  # 5% daily profit target
 daily_profit_target_high = 0.10  # 10% daily profit target
-retry_attempts = 3  # Number of retry attempts for failed trades
 
 # MongoDB setup
 db_handler = MongoDBHandler('KuberaApexForex', 'trades', 'daily_summaries')
 print("Database connected successfully")
 
-# Function to fetch data
-def fetch_data(symbol, timeframe, start_time, end_time):
-    rates = mt5.copy_rates_range(symbol, timeframe, start_time, end_time)
-    return pd.DataFrame(rates)
-
-# Function to calculate ATR (Average True Range)
-def calculate_atr(df, period=14):
-    df['tr'] = np.maximum(df['high'] - df['low'], np.maximum(abs(df['high'] - df['close'].shift()), abs(df['low'] - df['close'].shift())))
-    atr = df['tr'].rolling(window=period).mean()
-    return atr
-
-# Function to identify significant movements (refined)
-def identify_movements(df):
-    movements = []
-    for i in range(1, len(df)):
-        price_change = (df['close'][i] - df['close'][i-1]) / df['close'][i-1]
-        if price_change > threshold:
-            movements.append((df['time'][i], df['close'][i], price_change, 'buy'))
-        elif price_change < -threshold:
-            movements.append((df['time'][i], df['close'][i], price_change, 'sell'))
-    return movements
-
-# Function to calculate dynamic lot size
-def calculate_lot_size(balance, risk_percentage, stop_loss):
-    risk_amount = balance * risk_percentage
-    lot_size = risk_amount / (stop_loss * 100000)  # Assuming 1 pip = 0.0001 for most currency pairs
-    return max(0.01, round(lot_size, 2))  # Ensure the minimum lot size is 0.01
-
-# Function to place a trade with stop-loss and take-profit
-def place_trade(symbol, action, lot_size, price, stop_loss, take_profit, retries=retry_attempts):
-    symbol_info = mt5.symbol_info(symbol)
-    if symbol_info is None:
-        print(f"Symbol {symbol} not found, cannot place trade")
-        return None
-
-    if not symbol_info.visible:
-        print(f"Symbol {symbol} is not visible, making it visible")
-        mt5.symbol_select(symbol, True)
-
-    for attempt in range(retries):
-        if action == "buy":
-            order_type = mt5.ORDER_TYPE_BUY
-            sl = price - stop_loss
-            tp = price + take_profit
-        else:
-            order_type = mt5.ORDER_TYPE_SELL
-            sl = price + stop_loss
-            tp = price - take_profit
-
-        request = {
-            "action": mt5.TRADE_ACTION_DEAL,
-            "symbol": symbol,
-            "volume": lot_size,
-            "type": order_type,
-            "price": price,
-            "sl": sl,
-            "tp": tp,
-            "deviation": 10,
-            "magic": 234000,
-            "comment": "AutoTrade",
-            "type_time": mt5.ORDER_TIME_GTC,
-            "type_filling": mt5.ORDER_FILLING_FOK,
-        }
-
-        result = mt5.order_send(request)
-        if result.retcode == mt5.TRADE_RETCODE_DONE:
-            return result
-        else:
-            print(f"Attempt {attempt + 1} failed for trade on {symbol}: {result.comment}")
-            time.sleep(1)  # Wait a bit before retrying
-
-    return result
-
-# Determine the current day and set symbols
-def get_trading_symbols():
-    today = datetime.now().weekday()
-    if today in [5, 6]:  # Saturday (5) and Sunday (6)
-        return symbols_weekend, False
-    else:
-        return symbols_weekday, True
-
-# Function to adjust cooldown period based on market conditions
-def adjust_cooldown_period(volatility):
-    # Adjust cooldown period based on the ATR (volatility)
-    return int(cooldown_period_base * (1 + volatility))
-
-# Track last trade time for cooldown
+# Track the last trade time for each symbol to enforce cooldown
 last_trade_time = {symbol: datetime.min for symbol in symbols_weekday + symbols_weekend}
 
 # Main trading function
 def run_trading_bot():
     global last_trade_time
-    account_info = mt5.account_info()
-    balance = account_info.balance if account_info else initial_balance
+    balance = get_account_balance() or initial_balance
     end_time = datetime.now()
     start_time = end_time - timedelta(days=7)  # Fetch data for the last 7 days
     trading_symbols, enforce_profit_target = get_trading_symbols()
@@ -143,8 +56,12 @@ def run_trading_bot():
     for symbol in trading_symbols:
         for timeframe in timeframes:
             df = fetch_data(symbol, timeframe, start_time, end_time)
+            if df.empty:
+                print(f"No data fetched for {symbol} on timeframe {timeframe}")
+                continue
+
             df['atr'] = calculate_atr(df)
-            movements = identify_movements(df)
+            movements = identify_movements(df, threshold)
 
             for movement in movements:
                 time, price, price_change, action = movement
@@ -159,23 +76,26 @@ def run_trading_bot():
 
                     print(f"Placing trade on {symbol} with price change {price_change*100:.2f}%, action: {action}")
 
-                    result = place_trade(symbol, action, lot_size, price, stop_loss, take_profit)
+                    result = place_trade(symbol, action, lot_size, stop_loss, take_profit)
                     if result.retcode != mt5.TRADE_RETCODE_DONE:
                         print(f"Failed to place trade on {symbol}: {result.comment}")
                         continue
 
-                    # Log the trade in MongoDB
+                    # Convert numpy data types to native Python types
                     trade_log = {
                         'date': time,
                         'symbol': symbol,
                         'action': action,
-                        'price': price,
-                        'stop_loss': stop_loss,
-                        'take_profit': take_profit,
-                        'balance': balance,
-                        'lot_size': lot_size
+                        'price': float(price),
+                        'stop_loss': float(stop_loss),
+                        'take_profit': float(take_profit),
+                        'balance': float(balance),
+                        'lot_size': float(lot_size)
                     }
-                    db_handler.log_trade(trade_log)
+                    try:
+                        db_handler.log_trade(trade_log)
+                    except Exception as e:
+                        print(f"Failed to log trade for {symbol}: {e}")
 
                     # Update last trade time
                     last_trade_time[symbol] = datetime.now()
@@ -193,7 +113,10 @@ def run_trading_bot():
                     'daily_profit': daily_profit,
                     'profit_target_achieved': profit_target_achieved
                 }
-                db_handler.log_daily_summary(daily_summary)
+                try:
+                    db_handler.log_daily_summary(daily_summary)
+                except Exception as e:
+                    print(f"Failed to log daily summary for {symbol}: {e}")
 
 # Schedule the trading bot to run every minute
 schedule.every().minute.do(run_trading_bot)

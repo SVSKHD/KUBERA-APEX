@@ -1,4 +1,3 @@
-
 from pymongo import MongoClient
 
 class MongoDBHandler:
