@@ -3,29 +3,15 @@ import pandas as pd
 import joblib
 from datetime import datetime
 import time
-
-
-def initialize_mt5(login, password, server):
-    if not mt5.initialize(login=login, password=password, server=server):
-        print("MT5 initialization failed")
-        return False
-    return True
-
-
-def get_currency_symbols():
-    symbols = mt5.symbols_get()
-    currency_symbols = [symbol.name for symbol in symbols if '/' in symbol.name]
-    return currency_symbols
-
+from connection import initialize_mt5
+from fetch_symbols import get_currency_symbols
 
 def get_latest_tick(symbol):
     tick = mt5.symbol_info_tick(symbol)
     return tick
 
-
 def calculate_percentage_change(previous, current):
     return ((current - previous) / previous) * 100
-
 
 def preprocess_data(df):
     df['returns'] = df['close'].pct_change()
@@ -39,7 +25,6 @@ def preprocess_data(df):
     df.dropna(inplace=True)
     return df
 
-
 def detect_trend(df):
     if df['sma_20'].iloc[-1] > df['sma_50'].iloc[-1]:
         return 'uptrend'
@@ -48,12 +33,10 @@ def detect_trend(df):
     else:
         return 'no trend'
 
-
 def detect_significant_movement(df, price_threshold=0.003):
     df['price_change'] = df['close'].pct_change()
     df['significant_price_movement'] = (df['price_change'].abs() > price_threshold)
     return df
-
 
 def monitor_and_trade(symbols, price_threshold=0.003, interval=5):
     while True:
@@ -75,8 +58,7 @@ def monitor_and_trade(symbols, price_threshold=0.003, interval=5):
             data = preprocess_data(data)
             data = detect_significant_movement(data)
 
-            features = ['open', 'high', 'low', 'close', 'volume', 'sma_20', 'sma_50', 'rsi_14', 'macd', 'bb_upper',
-                        'bb_lower']
+            features = ['open', 'high', 'low', 'close', 'volume', 'sma_20', 'sma_50', 'rsi_14', 'macd', 'bb_upper', 'bb_lower']
             X_latest = data[features]
 
             # Load models and scalers for multiple timeframes
@@ -98,7 +80,6 @@ def monitor_and_trade(symbols, price_threshold=0.003, interval=5):
                     f"{datetime.now()} | {symbol} | Trend: Downtrend | Prediction: Sell | Price: {current_price:.5f} | Percentage Change: {percentage_diff:.2f}%")
 
         time.sleep(interval)
-
 
 if __name__ == "__main__":
     login = 212792645

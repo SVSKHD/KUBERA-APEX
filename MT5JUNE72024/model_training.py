@@ -5,20 +5,8 @@ from xgboost import XGBClassifier
 import joblib
 import MetaTrader5 as mt5
 from datetime import datetime, timedelta
-
-
-def initialize_mt5(login, password, server):
-    if not mt5.initialize(login=login, password=password, server=server):
-        print("MT5 initialization failed")
-        return False
-    return True
-
-
-def get_currency_symbols():
-    symbols = mt5.symbols_get()
-    currency_symbols = [symbol.name for symbol in symbols if '/' in symbol.name]
-    return currency_symbols
-
+from connection import initialize_mt5
+from fetch_symbols import get_currency_symbols
 
 def get_historical_data(symbol, timeframe, start, end):
     rates = mt5.copy_rates_range(symbol, timeframe, start, end)
@@ -26,7 +14,6 @@ def get_historical_data(symbol, timeframe, start, end):
     data['time'] = pd.to_datetime(data['time'], unit='s')
     data.set_index('time', inplace=True)
     return data
-
 
 def preprocess_data(df):
     df['returns'] = df['close'].pct_change()
@@ -40,13 +27,11 @@ def preprocess_data(df):
     df.dropna(inplace=True)
     return df
 
-
 def prepare_features_targets(df):
     features = ['open', 'high', 'low', 'close', 'volume', 'sma_20', 'sma_50', 'rsi_14', 'macd', 'bb_upper', 'bb_lower']
     X = df[features]
     y = (df['returns'] > 0).astype(int)
     return X, y
-
 
 def train_model(symbol, timeframes):
     for timeframe in timeframes:
@@ -71,7 +56,6 @@ def train_model(symbol, timeframes):
 
         accuracy = model.score(X_test_scaled, y_test)
         print(f"Model accuracy for {symbol} on timeframe {timeframe}: {accuracy:.2f}")
-
 
 if __name__ == "__main__":
     login = 212792645
