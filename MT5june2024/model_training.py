@@ -1,53 +1,26 @@
-from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from xgboost import XGBClassifier
-from lightgbm import LGBMClassifier
-from sklearn.metrics import accuracy_score, classification_report
+from sklearn.metrics import accuracy_score
 from sklearn.ensemble import VotingClassifier
 from sklearn.preprocessing import StandardScaler
 import pandas as pd
 import time
 import threading
 from data_collection import collect_and_preprocess_data
-import matplotlib.pyplot as plt
-import os
 
 ensemble_model = None
 scaler = StandardScaler()
 model_trained_condition = threading.Condition()
 
-def analyze_data_distribution(data):
-    # Plot the distribution of the target variable
-    plt.figure(figsize=(10, 6))
-    data['target'].value_counts().plot(kind='bar')
-    plt.title('Distribution of Target Variable')
-    plt.xlabel('Target')
-    plt.ylabel('Count')
-    plt.savefig('plots/target_distribution.png')
-    plt.close()
-
-    # Plot the distribution of each feature
-    features = data.columns.difference(['target'])
-    for feature in features:
-        plt.figure(figsize=(10, 6))
-        data[feature].hist(bins=50)
-        plt.title(f'Distribution of {feature}')
-        plt.xlabel(feature)
-        plt.ylabel('Frequency')
-        plt.savefig(f'plots/{feature}_distribution.png')
-        plt.close()
-
 def train_model():
     global ensemble_model, scaler
     while True:
-        print("Starting model training...")
         all_data = collect_and_preprocess_data()
-        print("Data collected and preprocessed.")
 
         combined_data_list = []
         for symbol, symbol_data in all_data.items():
-            print(f"Processing symbol: {symbol}")
             if 'H1' not in symbol_data or symbol_data['H1'].empty:
                 print(f"No H1 data for {symbol}")
                 continue
@@ -76,12 +49,6 @@ def train_model():
             time.sleep(3600)
             continue
 
-        # Create directories for saving plots if not exist
-        os.makedirs('plots', exist_ok=True)
-
-        # Analyze data distribution
-        analyze_data_distribution(combined_data)
-
         # Create features and target
         features = combined_data.columns.difference(['target'])
         X = combined_data[features]
@@ -94,9 +61,9 @@ def train_model():
         # Split the data into training and testing sets
         X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
 
-        # Train individual models with regularization
-        lr = LogisticRegression(max_iter=1000, C=0.1)  # Added regularization
-        rf = RandomForestClassifier(n_estimators=100, max_depth=10)  # Limited depth to prevent overfitting
+        # Train individual models
+        lr = LogisticRegression(max_iter=1000)
+        rf = RandomForestClassifier()
         xgb = XGBClassifier()
         lgbm = LGBMClassifier()
 
@@ -108,29 +75,16 @@ def train_model():
             ('lgbm', lgbm)
         ], voting='hard')
 
-        # Cross-validation
-        scores = cross_val_score(ensemble_model, X_train, y_train, cv=5)
-        print(f"Cross-Validation Scores: {scores}")
-        print(f"Mean Cross-Validation Score: {scores.mean()}")
-
         # Train the ensemble model
         ensemble_model.fit(X_train, y_train)
 
-        # Evaluate the model on the test set
-        y_test_pred = ensemble_model.predict(X_test)
-        test_accuracy = accuracy_score(y_test, y_test_pred)
-        print(f"Test Accuracy: {test_accuracy}")
-        print(classification_report(y_test, y_test_pred))
+        # Evaluate the model
+        y_pred = ensemble_model.predict(X_test)
+        print("Ensemble Model Accuracy:", accuracy_score(y_test, y_pred))
 
         # Notify trading thread that the model is trained
         with model_trained_condition:
             model_trained_condition.notify_all()
-            print("Model training completed and condition notified.")
 
         # Retrain every hour
-        print("Model will retrain after 1 hour.")
         time.sleep(3600)
-
-# Start the model training in a separate thread
-training_thread = threading.Thread(target=train_model)
-training_thread.start()

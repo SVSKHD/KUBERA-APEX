@@ -1,8 +1,9 @@
+import threading
+
 import MetaTrader5 as mt5
 import time
 from datetime import datetime
 from pymongo import MongoClient
-import threading
 from data_collection import get_historical_data, preprocess_data, symbols, timeframes
 from model_training import ensemble_model, scaler, model_trained_condition
 
@@ -24,40 +25,6 @@ initial_capital = 1000
 daily_profit_target = initial_capital * 0.02
 current_profit = 0
 performance = {symbol: 0 for symbol in symbols}  # Track performance for each symbol
-
-
-def close_all_trades():
-    positions = mt5.positions_get()
-    if positions is None:
-        print("No open positions to close.")
-        return
-
-    for position in positions:
-        request = {
-            "action": mt5.TRADE_ACTION_DEAL,
-            "symbol": position.symbol,
-            "volume": position.volume,
-            "type": mt5.ORDER_TYPE_SELL if position.type == mt5.ORDER_TYPE_BUY else mt5.ORDER_TYPE_BUY,
-            "position": position.ticket,
-            "price": mt5.symbol_info_tick(
-                position.symbol).ask if position.type == mt5.ORDER_TYPE_BUY else mt5.symbol_info_tick(
-                position.symbol).bid,
-            "deviation": 20,
-            "magic": 234000,
-            "comment": "Auto trade close",
-            "type_time": mt5.ORDER_TIME_GTC,
-            "type_filling": mt5.ORDER_FILLING_FOK,
-        }
-        result = mt5.order_send(request)
-        if result.retcode != mt5.TRADE_RETCODE_DONE:
-            print(f"Failed to close position {position.ticket} for {position.symbol}: {result.retcode}")
-
-
-def calculate_total_profit():
-    positions = mt5.positions_get()
-    if positions is None:
-        return 0
-    return sum(position.profit for position in positions)
 
 
 def place_trade(symbol):
@@ -177,29 +144,13 @@ def place_trade(symbol):
 
 def run_trading_bot():
     global current_profit
-    while True:
-        total_profit = calculate_total_profit()
-        if total_profit >= daily_profit_target:
-            close_all_trades()
-            print(f"Daily profit target achieved. Total profit: {total_profit}. Closing all trades.")
-            break
-
+    while current_profit < daily_profit_target:
         for symbol in symbols:
             place_trade(symbol)
-            total_profit = calculate_total_profit()
-            if total_profit >= daily_profit_target:
-                close_all_trades()
-                print(f"Daily profit target achieved. Total profit: {total_profit}. Closing all trades.")
+            if current_profit >= daily_profit_target:
                 break
-
         # Switch to next symbol if current symbol is not profitable
         symbols.sort(key=lambda x: performance[x])
-        time.sleep(3600)  # Wait for an hour before checking again
-
-    # Continue monitoring the market after achieving the daily profit target
-    while True:
-        for symbol in symbols:
-            place_trade(symbol)
         time.sleep(3600)  # Wait for an hour before checking again
 
 
