@@ -14,10 +14,12 @@ data_dir = "historical_data"
 os.makedirs(data_dir, exist_ok=True)
 
 # Dictionary to store historical data for all symbols
-historical_data = {symbol: pd.DataFrame(columns=['datetime', 'open', 'high', 'low', 'close', 'volume']) for symbol in symbols}
+historical_data = {symbol: pd.DataFrame(columns=['datetime', 'open', 'high', 'low', 'close', 'volume']) for symbol in
+                   symbols}
 
 # Random Forest model initialization
 model = RandomForestClassifier(n_estimators=100, random_state=42)
+
 
 # Preprocess the data and create features and labels
 def preprocess_data(data):
@@ -28,6 +30,7 @@ def preprocess_data(data):
     df['target'] = df['price_diff'].apply(lambda x: 1 if x > 0 else 0)
     df = df.dropna()
     return df
+
 
 # Function to make trading decisions
 def make_trading_decision(data, model):
@@ -54,7 +57,8 @@ def make_trading_decision(data, model):
 
     return df[['trade_signal', 'entry_price']]
 
-# Function to fetch historical data if the market is closed
+
+# Function to fetch historical data
 def fetch_historical_data(symbol, from_date, to_date):
     print(f"Fetching data for {symbol} from {from_date} to {to_date}")
     try:
@@ -77,7 +81,8 @@ def fetch_historical_data(symbol, from_date, to_date):
         print(f"Failed to fetch data for {symbol}: {e}")
         return []
 
-# Train the model
+
+# Function to train the model
 def train_model():
     combined_data = []
     for symbol, data in historical_data.items():
@@ -107,27 +112,30 @@ def train_model():
     else:
         print("No data available to train the model.")
 
-# Main execution logic
-print("Market is closed. Fetching historical data...")
-from_date = (datetime.datetime.now() - datetime.timedelta(days=365)).strftime('%Y-%m-%d')
-to_date = datetime.datetime.now().strftime('%Y-%m-%d')
-for symbol in symbols:
-    data = fetch_historical_data(symbol, from_date, to_date)
-    if data:
-        historical_data[symbol] = pd.DataFrame(data, columns=['datetime', 'open', 'high', 'low', 'close', 'volume'])
-        # Save data to CSV
-        historical_data[symbol].to_csv(os.path.join(data_dir, f"{symbol}.csv"), index=False)
-    else:
-        print(f"No historical data found for {symbol}")
 
-# Train the model initially
-train_model()
+# Main function for historical analysis
+def run_historical_analysis():
+    print("Market is closed. Fetching historical data...")
+    from_date = (datetime.datetime.now() - datetime.timedelta(days=365)).strftime('%Y-%m-%d')
+    to_date = datetime.datetime.now().strftime('%Y-%m-%d')
+    for symbol in symbols:
+        data = fetch_historical_data(symbol, from_date, to_date)
+        if data:
+            historical_data[symbol] = pd.DataFrame(data, columns=['datetime', 'open', 'high', 'low', 'close', 'volume'])
+            # Save data to CSV
+            historical_data[symbol].to_csv(os.path.join(data_dir, f"{symbol}.csv"), index=False)
+        else:
+            print(f"No historical data found for {symbol}")
 
-# Make trading decisions based on historical data
-for symbol in symbols:
-    if not historical_data[symbol].empty:
-        decision_df = make_trading_decision(historical_data[symbol].to_dict('records'), model)
-        latest_decision = decision_df.iloc[-1]
-        print(f"Trading decision for {symbol}: {latest_decision['trade_signal']} at {latest_decision['entry_price']}")
-    else:
-        print(f"No data available for {symbol} to make trading decisions.")
+    # Train the model initially
+    train_model()
+
+    # Make trading decisions based on historical data
+    for symbol in symbols:
+        if not historical_data[symbol].empty:
+            decision_df = make_trading_decision(historical_data[symbol].to_dict('records'), model)
+            latest_decision = decision_df.iloc[-1]
+            print(
+                f"Trading decision for {symbol}: {latest_decision['trade_signal']} at {latest_decision['entry_price']}")
+        else:
+            print(f"No data available for {symbol} to make trading decisions.")

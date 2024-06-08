@@ -16,17 +16,19 @@ access_token = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJkaGFuIiwicGFydG5
 dhan = dhanhq(client_id, access_token)
 
 # List of actual symbol names (replace with the actual symbol names)
-symbols = ["TCS", "RELIANCE", "INFY", "HDFCBANK"]  # Replace these with actual symbols
+symbols = ["TCS", "RELIANCE", "INFY", "HDFCBANK", "ITC", "WIPRO", "HCLTECH", "LT", "SBIN", "ICICIBANK", "AXISBANK", "KOTAKBANK", "BAJFINANCE", "MARUTI", "NRBBEARING"] # Replace these with actual symbols
 
 # Directory to store historical data
 data_dir = "historical_data"
 os.makedirs(data_dir, exist_ok=True)
 
 # Dictionary to store historical data for all symbols
-historical_data = {symbol: pd.DataFrame(columns=['datetime', 'open', 'high', 'low', 'close', 'volume']) for symbol in symbols}
+historical_data = {symbol: pd.DataFrame(columns=['datetime', 'open', 'high', 'low', 'close', 'volume']) for symbol in
+                   symbols}
 
 # Random Forest model initialization
 model = RandomForestClassifier(n_estimators=100, random_state=42)
+
 
 # Preprocess the data and create features and labels
 def preprocess_data(data):
@@ -43,6 +45,7 @@ def preprocess_data(data):
     df['target'] = df['price_diff'].apply(lambda x: 1 if x > 0 else 0)
     df = df.dropna()
     return df
+
 
 # Function to make trading decisions
 def make_trading_decision(data, model):
@@ -69,6 +72,7 @@ def make_trading_decision(data, model):
 
     return df[['trade_signal', 'entry_price']]
 
+
 # Function to handle incoming WebSocket messages
 async def on_message(instance, message):
     message_data = json.loads(message)
@@ -93,9 +97,11 @@ async def on_message(instance, message):
     latest_decision = decision_df.iloc[-1]
     print(f"Trading decision for {symbol}: {latest_decision['trade_signal']} at {latest_decision['entry_price']}")
 
+
 # Function to handle WebSocket connection
 async def on_connect(instance):
     print("Connected to websocket")
+
 
 # Function to check if the market is open
 def is_market_open():
@@ -103,6 +109,7 @@ def is_market_open():
     market_open_time = datetime.time(9, 15)
     market_close_time = datetime.time(15, 30)
     return market_open_time <= current_time <= market_close_time
+
 
 # Function to fetch historical data if the market is closed
 def fetch_historical_data(symbol, from_date, to_date):
@@ -126,6 +133,7 @@ def fetch_historical_data(symbol, from_date, to_date):
     except Exception as e:
         print(f"Failed to fetch data for {symbol}: {e}")
         return []
+
 
 # Train the model
 def train_model():
@@ -157,6 +165,7 @@ def train_model():
     else:
         print("No data available to train the model.")
 
+
 # Function to run the WebSocket feed
 def run_feed():
     subscription_code = marketfeed.Ticker
@@ -171,10 +180,12 @@ def run_feed():
     )
     feed.run_forever()
 
+
 # Check if the market is open and if today is a weekday
 def is_weekday():
     today = datetime.datetime.today().weekday()
     return today < 5  # 0 is Monday, 4 is Friday
+
 
 # Main execution logic
 if is_weekday() and is_market_open():
@@ -201,6 +212,7 @@ else:
         if not historical_data[symbol].empty:
             decision_df = make_trading_decision(historical_data[symbol].to_dict('records'), model)
             latest_decision = decision_df.iloc[-1]
-            print(f"Trading decision for {symbol}: {latest_decision['trade_signal']} at {latest_decision['entry_price']}")
+            print(
+                f"Trading decision for {symbol}: {latest_decision['trade_signal']} at {latest_decision['entry_price']}")
         else:
             print(f"No data available for {symbol} to make trading decisions.")
